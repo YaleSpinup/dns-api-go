@@ -1,0 +1,13 @@
+{ 
+  "listenAddress": ":8080",
+  "account": {
+    "region": "us-east-1",
+    "akid": "xxxxxxxxxxxxxxxxxxxxxxxx",
+    "secret": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+    "externalId": "zzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    "role": "some-xa-management-role"
+  },
+  "token": "1f1242f3-0ca7-4145-b332-f5f5a4a92e54",
+  "logLevel": "info",
+  "org": "dev"
+}

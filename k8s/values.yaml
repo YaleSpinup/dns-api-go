@@ -1,0 +1,13 @@
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  annotations: {}
+  rules:
+    - paths: ['/v1/test']
+
+probePath: '/v1/test/ping'
