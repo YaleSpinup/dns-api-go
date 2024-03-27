@@ -95,6 +95,15 @@ func NewServer(config common.Config) error {
 	}
 	s.orgPolicy = orgPolicy
 
+	if b := config.ProxyBackend; b != nil {
+		log.Debugf("configuring proxy backend %s", b.BaseUrl)
+		s.backend = &proxyBackend{
+			baseUrl: b.BaseUrl,
+			token:   b.Token,
+			prefix:  b.BackendPrefix,
+		}
+	}
+
 	// Create a new session used for authentication and assuming cross account roles
 	log.Debugf("Creating new session with key '%s' in region '%s'", config.Account.Akid, config.Account.Region)
 	s.session = session.New(
