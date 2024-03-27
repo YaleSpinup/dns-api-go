@@ -23,8 +23,35 @@ import (
 )
 
 func (s *server) routes() {
-	api := s.router.PathPrefix("/v1/test").Subrouter()
+	api := s.router.PathPrefix("/v2/dns").Subrouter()
 	api.HandleFunc("/ping", s.PingHandler).Methods(http.MethodGet)
 	api.HandleFunc("/version", s.VersionHandler).Methods(http.MethodGet)
 	api.Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
+
+	// Custom search based on type and filters
+	api.HandleFunc("/{account}/search", s.ProxyRequestHandler).Methods(http.MethodGet)
+
+	// Manage entities by ID
+	api.HandleFunc("/{account}/id/{id}", s.ProxyRequestHandler).Methods(http.MethodGet, http.MethodDelete)
+
+	// Manage Zones
+	api.HandleFunc("/{account}/zones", s.ProxyRequestHandler).Methods(http.MethodGet)
+	api.HandleFunc("/{account}/zones/{id}", s.ProxyRequestHandler).Methods(http.MethodGet)
+
+	// Manage DNS records
+	api.HandleFunc("/{account}/records", s.ProxyRequestHandler).Methods(http.MethodGet, http.MethodPost)
+	api.HandleFunc("/{account}/records/{id}", s.ProxyRequestHandler).Methods(http.MethodGet, http.MethodPut, http.MethodDelete)
+
+	// Manage Networks
+	api.HandleFunc("/{account}/networks", s.ProxyRequestHandler).Methods(http.MethodGet)
+	api.HandleFunc("/{account}/networks/{id}", s.ProxyRequestHandler).Methods(http.MethodGet)
+
+	// Manage IP addresses
+	api.HandleFunc("/{account}/ips", s.ProxyRequestHandler).Methods(http.MethodPost)
+	api.HandleFunc("/{account}/ips/{ip}", s.ProxyRequestHandler).Methods(http.MethodGet, http.MethodPut, http.MethodDelete)
+	api.HandleFunc("/{account}/ips/cidrs", s.ProxyRequestHandler).Methods(http.MethodGet)
+
+	// Manage MAC addresses
+	api.HandleFunc("/{account}/macs", s.ProxyRequestHandler).Methods(http.MethodPost, http.MethodPut)
+	api.HandleFunc("/{account}/macs/{mac}", s.ProxyRequestHandler).Methods(http.MethodGet)
 }

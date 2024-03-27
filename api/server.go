@@ -49,12 +49,19 @@ type apiVersion struct {
 	BuildStamp string `json:"buildstamp"`
 }
 
+type proxyBackend struct {
+	baseUrl string
+	token   string
+	prefix  string
+}
+
 type server struct {
 	router       *mux.Router
 	version      *apiVersion
 	context      context.Context
 	session      session.Session
 	sessionCache *cache.Cache
+	backend      *proxyBackend
 	orgPolicy    string
 	org          string
 }

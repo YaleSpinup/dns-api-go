@@ -29,9 +29,16 @@ type Config struct {
 	ListenAddress string
 	Account       Account
 	Token         string
+	ProxyBackend  *ProxyBackend
 	LogLevel      string
 	Version       Version
 	Org           string
+}
+
+type ProxyBackend struct {
+	BaseUrl       string
+	Token         string
+	BackendPrefix string
 }
 
 // Account is the configuration for an individual account
