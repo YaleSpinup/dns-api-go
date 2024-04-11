@@ -30,6 +30,7 @@ type Config struct {
 	Account       Account
 	Token         string
 	ProxyBackend  *ProxyBackend
+	Bluecat       *Bluecat
 	LogLevel      string
 	Version       Version
 	Org           string
@@ -39,6 +40,12 @@ type ProxyBackend struct {
 	BaseUrl       string
 	Token         string
 	BackendPrefix string
+}
+
+type Bluecat struct {
+	BaseUrl  string
+	Username string
+	Password string
 }
 
 // Account is the configuration for an individual account

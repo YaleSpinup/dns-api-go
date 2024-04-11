@@ -15,5 +15,10 @@ FROM alpine
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=build-env /go/api.out /app/api
+
+# Copy the config directory into the image
+COPY config /app/config
+
 EXPOSE 80
 ENTRYPOINT ["./api"]
+

@@ -7,6 +7,16 @@
     "externalId": "{{ .external_id }}",
     "role": "{{ .cross_account_role }}"
   },
+  "proxyBackend": {
+    "baseUrl": "https://api-tst.internal.yale.edu",
+    "backendPrefix": "/v1/dns",
+    "token": "{{ .proxy_backend_token }}"
+  },
+  "bluecat": {
+    "baseUrl": "https://bam-6000.its.yale.edu/Services/REST/v1",
+    "username": "{{ .bluecat_api_username }}",
+    "password": "{{ .bluecat_api_password }}"
+  },
   "token": "{{ .api_token }}",
   "logLevel": "{{ .log_level }}",
   "org": "{{ .spinup_org }}"
