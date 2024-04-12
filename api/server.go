@@ -55,6 +55,12 @@ type proxyBackend struct {
 	prefix  string
 }
 
+type bluecat struct {
+	baseUrl  string
+	user     string
+	password string
+}
+
 type server struct {
 	router       *mux.Router
 	version      *apiVersion
@@ -62,6 +68,7 @@ type server struct {
 	session      session.Session
 	sessionCache *cache.Cache
 	backend      *proxyBackend
+	bluecat      *bluecat
 	orgPolicy    string
 	org          string
 }
@@ -94,6 +101,15 @@ func NewServer(config common.Config) error {
 		return err
 	}
 	s.orgPolicy = orgPolicy
+
+	if b := config.Bluecat; b != nil {
+		log.Debugf("configuring bluecat %s", b.BaseUrl)
+		s.bluecat = &bluecat{
+			baseUrl:  b.BaseUrl,
+			user:     b.Username,
+			password: b.Password,
+		}
+	}
 
 	if b := config.ProxyBackend; b != nil {
 		log.Debugf("configuring proxy backend %s", b.BaseUrl)

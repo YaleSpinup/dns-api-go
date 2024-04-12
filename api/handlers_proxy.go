@@ -1,7 +1,6 @@
 package api
 
 import (
-	"github.com/YaleSpinup/apierror"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
@@ -9,30 +8,38 @@ import (
 	"time"
 )
 
-// ProxyRequestHandler proxies requests to a given backend
+const (
+	backendTimeout = 120 * time.Second
+	backendPrefix  = "/v2/dns"
+	contentType    = "application/json"
+)
+
 func (s *server) ProxyRequestHandler(w http.ResponseWriter, r *http.Request) {
-	log.Debugf("Method: %s", r.Method)
+	log.Debugf("Method: %s, URL: %s, Client IP: %s", r.Method, r.URL, r.RemoteAddr)
 
-	url := strings.Replace(r.URL.String(), "/v2/dns", s.backend.prefix, 1)
-	log.Infof("proxying request: %s to %s", r.URL, url)
+	backendURL := strings.Replace(r.URL.String(), backendPrefix, s.backend.prefix, 1)
+	log.Debugf("Proxying request: %s to %s", r.URL, backendURL)
 
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, s.backend.baseUrl+url, r.Body)
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, s.backend.baseUrl+backendURL, r.Body)
 	if err != nil {
-		log.Errorf("failed to generate backend request for %s: %s", url, err)
+		log.Errorf("Failed to generate backend request for %s: %s", backendURL, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
 	}
 
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("X-Auth-Token", s.backend.token)
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: backendTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		handleError(w, apierror.New(apierror.ErrInternalError, "failed to proxy request to backend", nil))
+		log.Errorf("Failed to proxy request to backend: %s", err)
+		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 }
