@@ -1,0 +1,29 @@
+apiVersion: skaffold/v2beta10
+kind: Config
+build:
+  local: {}
+  artifacts:
+  - image: hub.docker.com/yaleits/dns-api-go
+    buildpacks:
+      # https://paketo.io/
+      # https://github.com/paketo-buildpacks/stacks
+      # the "tiny" builder is ideal for
+      # most Go apps, Java GraalVM Native Images
+      builder: paketobuildpacks/builder:tiny
+      # the "full" builder is ideal for
+      # PHP/Node.js/Python/Ruby/etc. apps with many native extensions
+      # builder: paketobuildpacks/builder:full
+deploy:
+  kubectl:
+    manifests:
+      - k8s/k8s-*
+  helm:
+    releases:
+    - name: dns-api-go
+      chartPath: k8s/api
+      artifactOverrides:
+        image: hub.docker.com/yaleits/dns-api-go
+      setFiles:
+        apiconfig: config/config.json
+      valuesFiles:
+        - k8s/values.yaml

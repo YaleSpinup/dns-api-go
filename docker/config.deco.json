@@ -1,0 +1,11 @@
+{ 
+  "listenAddress": "{{ .listen_address }}",
+  "proxyBackend": {
+    "baseUrl": "{{ .proxy_backend_base_url }}",
+    "backendPrefix": "{{ .proxy_backend_prefix }}",
+    "token": "{{ .proxy_backend_token }}"
+  },
+  "token": "{{ .token }}",
+  "logLevel": "{{ .log_level }}",
+  "org": "{{ .org }}"
+}
