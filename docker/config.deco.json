@@ -1,4 +1,4 @@
-{ 
+{
   "listenAddress": ":8080",
   "account": {
     "region": "us-east-1",

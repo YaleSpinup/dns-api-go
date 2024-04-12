@@ -36,7 +36,6 @@ ADD https://github.com/YaleUniversity/deco/releases/download/v${DECO_VERSION}/de
 RUN cd /usr/local/bin && tar -zxvf deco.tar.gz && rm -f deco.tar.gz && chmod 555 deco && /usr/local/bin/deco version
 
 COPY docker/*_config.sh /app
-RUN chmod +x /app/*_config.sh
 
 COPY docker/config.deco.json /app/config/config.json
 RUN chmod 600 /app/config/config.json
