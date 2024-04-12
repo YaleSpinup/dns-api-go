@@ -5,6 +5,11 @@
     "backendPrefix": "{{ .proxy_backend_prefix }}",
     "token": "{{ .proxy_backend_token }}"
   },
+  "bluecat": {
+    "baseUrl": "{{ .bluecat_api_baseUrl }}",
+    "username": "{{ .bluecat_api_username }}",
+    "password": "{{ .bluecat_api_password }}"
+  },
   "token": "{{ .token }}",
   "logLevel": "{{ .log_level }}",
   "org": "{{ .org }}"
