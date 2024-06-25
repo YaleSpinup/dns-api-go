@@ -23,7 +23,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -82,13 +81,28 @@ func (s *server) generateAuthToken(username, password string) (string, error) {
 	return token, nil
 }
 
+func (s *server) getToken() (string, error) {
+	s.bluecat.tokenLock.Lock()
+	defer s.bluecat.tokenLock.Unlock()
+
+	if s.bluecat.token == "" {
+		token, err := s.generateAuthToken(s.bluecat.user, s.bluecat.password)
+		if err != nil {
+			return "", err
+		}
+		s.bluecat.token = token
+	}
+
+	return s.bluecat.token, nil
+}
+
 func (s *server) makeRequest(route, queryParam string) ([]byte, error) {
 	// Construct the API URL
 	apiURL := s.bluecat.baseUrl + route
 	if queryParam != "" {
 		apiURL += "?" + queryParam
 	}
-	token, err := s.generateAuthToken(s.bluecat.user, s.bluecat.password)
+	token, err := s.getToken()
 	log.Printf("API URL: %s", apiURL)
 
 	// Create a new HTTP request
@@ -119,6 +133,17 @@ func (s *server) makeRequest(route, queryParam string) ([]byte, error) {
 	}
 
 	// Check the response status code
+	if resp.StatusCode == http.StatusUnauthorized {
+		log.Printf("Unauthorized: Token expired or invalid. Generating a new token.")
+
+		// Clear the current token
+		s.bluecat.tokenLock.Lock()
+		s.bluecat.token = ""
+		s.bluecat.tokenLock.Unlock()
+
+		return s.makeRequest(route, queryParam)
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d, Body: %s", resp.StatusCode, string(body))
 	}
@@ -133,7 +158,8 @@ func (s *server) SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// Parse the response body
+
+	// Parse the response body into a map
 	info := make(map[string]string)
 	pairs := strings.Split(string(body), "|")
 	for _, pair := range pairs {
@@ -143,113 +169,50 @@ func (s *server) SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Create a JSON response
-	jsonResp := make(map[string]interface{})
-	jsonResp["hostName"] = getValueOrDefault(info, "hostName", "")
-	jsonResp["version"] = getValueOrDefault(info, "version", "")
-	jsonResp["address"] = getValueOrDefault(info, "address", "")
-	jsonResp["clusterRole"] = getValueOrDefault(info, "clusterRole", "")
-	jsonResp["replicationRole"] = getValueOrDefault(info, "replicationRole", "")
-	jsonResp["replicationStatus"] = getValueOrDefault(info, "replicationStatus", "")
-	jsonResp["entityCount"] = getValueOrDefault(info, "entityCount", "")
-	jsonResp["databaseSize"] = getValueOrDefault(info, "databaseSize", "")
-	jsonResp["loggedInUsers"] = getValueOrDefault(info, "loggedInUsers", "")
-
-	// Send the JSON response
+	// Set the Content-Type header to application/json
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(jsonResp)
+
+	// Encode the map as JSON and write it to the response
+	json.NewEncoder(w).Encode(info)
 }
 
-func getValueOrDefault(info map[string]string, key string, defaultValue string) string {
-	if value, ok := info[key]; ok {
-		return value
-	}
-	return defaultValue
-}
+func (s *server) GetRecordHintHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	count := r.URL.Query().Get("count")
+	options := r.URL.Query().Get("options")
+	start := r.URL.Query().Get("start")
+	recordType := r.URL.Query().Get("type")
 
-func (s *server) SearchHandler(w http.ResponseWriter, r *http.Request) {
-	log.Debugf("Method: %s, URL: %s, Client IP: %s", r.Method, r.URL, r.RemoteAddr)
-
-	token, err := s.generateAuthToken(s.bluecat.user, s.bluecat.password)
-
-	// Parse the query parameters from the request
-	query := r.URL.Query()
-
-	// Extract the object type and field name=value pairs from the query parameters
-	objectType := query.Get("type")
-	fieldParams := make(map[string]string)
-	for key, values := range query {
-		if key != "type" && key != "X-Auth-Token" && len(values) > 0 {
-			fieldParams[key] = values[0]
-		}
-	}
-
-	// Construct the API request URL
-	apiURL := s.bluecat.baseUrl + "/customSearch"
-
-	// Create a new URL object with the API URL
-	u, err := url.Parse(apiURL)
-	if err != nil {
-		log.Errorf("Failed to parse API URL: %s", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	// Determine the API endpoint based on the record type
+	var endpoint string
+	switch recordType {
+	case "HostRecord":
+		endpoint = "/getHostRecordsByHint"
+	case "AliasRecord":
+		endpoint = "/getAliasesByHint"
+	default:
+		supportedTypes := []string{"HostRecord", "AliasRecord"}
+		errorMsg := fmt.Sprintf("Invalid record type. Supported types: %s", strings.Join(supportedTypes, ", "))
+		http.Error(w, errorMsg, http.StatusBadRequest)
 		return
 	}
 
-	// Set the query parameters on the new URL object
-	q := u.Query()
-	q.Set("type", objectType)
-	for key, value := range fieldParams {
-		q.Set(key, value)
-	}
-	u.RawQuery = q.Encode()
-
-	// Create a new HTTP request with the context from the incoming request and the new URL
-	req, err := http.NewRequestWithContext(r.Context(), "GET", u.String(), nil)
-	if err != nil {
-		log.Errorf("Failed to create API request: %s", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	// Set the necessary headers (e.g., authentication token)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authentication", token)
+	// Construct the query parameter string
+	queryParam := fmt.Sprintf("count=%s&options=%s&start=%s", count, options, start)
 
 	// Make the API request
-	client := &http.Client{
-		Timeout: 120 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-	}
-	resp, err := client.Do(req)
+	body, err := s.makeRequest(endpoint, queryParam)
 	if err != nil {
-		log.Errorf("Failed to make API request: %s", err)
-		http.Error(w, "Bad Gateway", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
-	// Check the response status code
-	if resp.StatusCode != http.StatusOK {
-		log.Errorf("API request failed with status code: %d %s %s", resp.StatusCode, apiURL, req.URL)
-		http.Error(w, "Upstream server error", resp.StatusCode)
+		log.Printf("Error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Parse the response body
-	var searchResults interface{}
-	err = json.NewDecoder(resp.Body).Decode(&searchResults)
-	if err != nil {
-		log.Errorf("Failed to parse API response: %s", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	// Write the search results as JSON response
+	// Set the Content-Type header to application/json
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(searchResults)
+
+	// Write the response body as-is
+	w.Write(body)
 }
 
 // VersionHandler responds to version requests

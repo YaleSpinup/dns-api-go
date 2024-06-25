@@ -23,6 +23,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"dns-api-go/common"
@@ -56,9 +57,11 @@ type proxyBackend struct {
 }
 
 type bluecat struct {
-	baseUrl  string
-	user     string
-	password string
+	baseUrl   string
+	user      string
+	password  string
+	token     string
+	tokenLock sync.Mutex
 }
 
 type server struct {

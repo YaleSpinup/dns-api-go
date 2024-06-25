@@ -29,6 +29,7 @@ func (s *server) routes() {
 	api.Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
 	api.HandleFunc("/", s.ProxyRequestHandler).Methods(http.MethodGet)
 	api.HandleFunc("/systeminfo", s.SystemInfoHandler).Methods(http.MethodGet)
+	api.HandleFunc("/record/hint", s.GetRecordHintHandler).Methods(http.MethodGet)
 
 	// Custom search based on type and filters
 	api.HandleFunc("/search", s.ProxyRequestHandler).Methods(http.MethodGet)
