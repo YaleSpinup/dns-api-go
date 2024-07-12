@@ -216,7 +216,7 @@ func (s *server) GetRecordHintHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-func (s *server) GetEntityIdHandler(w http.ResponseWriter, r *http.Request) {
+func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse the account and entity ID from the URL
 	vars := mux.Vars(r)
 	account := vars["account"]
@@ -242,7 +242,10 @@ func (s *server) GetEntityIdHandler(w http.ResponseWriter, r *http.Request) {
 
 	// return response
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(resp)
+	n, err := w.Write(resp)
+	if err != nil {
+		log.Printf("Failed to write response: %v, bytes written: %d", err, n)
+	}
 }
 
 // VersionHandler responds to version requests

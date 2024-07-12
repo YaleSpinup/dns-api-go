@@ -35,7 +35,7 @@ func (s *server) routes() {
 	api.HandleFunc("/search", s.ProxyRequestHandler).Methods(http.MethodGet)
 
 	// Manage entities by ID
-	api.HandleFunc("/{account}/id/{id}", s.GetEntityIdHandler).Methods(http.MethodGet, http.MethodDelete)
+	api.HandleFunc("/{account}/id/{id}", s.EntityIdHandler).Methods(http.MethodGet, http.MethodDelete)
 
 	// Manage Zones
 	api.HandleFunc("/{account}/zones", s.ProxyRequestHandler).Methods(http.MethodGet)
