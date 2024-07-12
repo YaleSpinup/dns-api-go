@@ -219,9 +219,15 @@ func (s *server) GetRecordHintHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse the account and entity ID from the URL
 	vars := mux.Vars(r)
-	account := vars["account"]
-	id := vars["id"]
+	id, idOk := vars["id"]
+	account, accountOk := vars["account"]
 	includeHA := r.URL.Query().Get("includeHA")
+
+	// Check parameters
+	if !idOk || !accountOk {
+		http.Error(w, "Missing required parameters: id or account", http.StatusBadRequest)
+		return
+	}
 	if includeHA == "" {
 		includeHA = "true"
 	}
@@ -236,15 +242,36 @@ func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 	route, params := "/getEntityById", fmt.Sprintf("id=%s&includeHA=%s", id, includeHA)
 	resp, err := s.makeRequest(route, params)
 
+	// Check for errors when sending request
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Check for empty values
+	type EntityResponse struct {
+		ID         int     `json:"id"`
+		Name       *string `json:"name"`
+		Type       *string `json:"type"`
+		Properties *string `json:"properties"` // Adjust the type according to your actual data structure
+	}
+	var entityResp EntityResponse
+	if err := json.Unmarshal(resp, &entityResp); err != nil {
+		log.Printf("Error unmarshaling response: %v", err)
+		http.Error(w, "Error processing response", http.StatusInternalServerError)
+		return
+	}
+	// Check if the response represents an empty entity
+	if entityResp.ID == 0 && entityResp.Name == nil && entityResp.Type == nil && entityResp.Properties == nil {
+		http.Error(w, "Entity not found", http.StatusNotFound)
+		return
 	}
 
 	// return response
+	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
-	n, err := w.Write(resp)
-	if err != nil {
-		log.Printf("Failed to write response: %v, bytes written: %d", err, n)
+	if _, err := w.Write(resp); err != nil {
+		log.Printf("Failed to write response: %v", err)
 	}
 }
 
