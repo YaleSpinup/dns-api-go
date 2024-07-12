@@ -57,6 +57,7 @@ type proxyBackend struct {
 }
 
 type bluecat struct {
+	account   string
 	baseUrl   string
 	user      string
 	password  string
@@ -108,6 +109,7 @@ func NewServer(config common.Config) error {
 	if b := config.Bluecat; b != nil {
 		log.Debugf("configuring bluecat %s", b.BaseUrl)
 		s.bluecat = &bluecat{
+			account:  b.Account,
 			baseUrl:  b.BaseUrl,
 			user:     b.Username,
 			password: b.Password,

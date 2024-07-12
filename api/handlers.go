@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/mux"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -213,6 +214,35 @@ func (s *server) GetRecordHintHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Write the response body as-is
 	w.Write(body)
+}
+
+func (s *server) GetEntityIdHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse the account and entity ID from the URL
+	vars := mux.Vars(r)
+	account := vars["account"]
+	id := vars["id"]
+	includeHA := r.URL.Query().Get("includeHA")
+	if includeHA == "" {
+		includeHA = "true"
+	}
+
+	// Validate the account
+	if s.bluecat.account != account {
+		http.Error(w, "Invalid account", http.StatusBadRequest)
+		return
+	}
+
+	// Send http request to bluecat
+	route, params := "/getEntityById", fmt.Sprintf("id=%s&includeHA=%s", id, includeHA)
+	resp, err := s.makeRequest(route, params)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	// return response
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(resp)
 }
 
 // VersionHandler responds to version requests
