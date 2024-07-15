@@ -17,6 +17,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package api
 
 import (
+	"github.com/gorilla/mux"
 	"net/http"
 	"net/url"
 
@@ -59,6 +60,26 @@ func TokenMiddleware(psk []byte, public map[string]string, h http.Handler) http.
 			}
 
 			log.Infof("Successfully authenticated token for URL '%s'", r.URL)
+		}
+
+		h.ServeHTTP(w, r)
+	})
+}
+
+func (s *server) AccountValidationMiddleware(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Validate the account
+		vars := mux.Vars(r)
+		account, accountOk := vars["account"]
+		// Check parameter
+		if !accountOk {
+			http.Error(w, "Missing required parameter: account", http.StatusBadRequest)
+			return
+		}
+
+		if s.bluecat.account != account {
+			http.Error(w, "Invalid account", http.StatusBadRequest)
+			return
 		}
 
 		h.ServeHTTP(w, r)
