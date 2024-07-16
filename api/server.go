@@ -65,6 +65,10 @@ type bluecat struct {
 	tokenLock sync.Mutex
 }
 
+type ServerInterface interface {
+	MakeRequest(route, queryParam string) ([]byte, error)
+}
+
 type server struct {
 	router       *mux.Router
 	version      *apiVersion
