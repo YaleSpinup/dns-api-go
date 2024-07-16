@@ -18,6 +18,7 @@ package api
 
 import (
 	"context"
+	"dns-api-go/api/services"
 	"encoding/json"
 	"errors"
 	"math/rand"
@@ -65,6 +66,10 @@ type bluecat struct {
 	tokenLock sync.Mutex
 }
 
+type Services struct {
+	EntityService services.EntityService
+}
+
 type ServerInterface interface {
 	MakeRequest(route, queryParam string) ([]byte, error)
 }
@@ -79,6 +84,7 @@ type server struct {
 	bluecat      *bluecat
 	orgPolicy    string
 	org          string
+	services     Services
 }
 
 // NewServer creates a new server and starts it
@@ -118,6 +124,11 @@ func NewServer(config common.Config) error {
 			user:     b.Username,
 			password: b.Password,
 		}
+	}
+
+	// Define services that interact with Bluecat entities
+	s.services = Services{
+		EntityService: services.NewGenericEntityService(&s),
 	}
 
 	if b := config.ProxyBackend; b != nil {
