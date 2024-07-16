@@ -70,10 +70,6 @@ type Services struct {
 	EntityService services.EntityService
 }
 
-type ServerInterface interface {
-	MakeRequest(route, queryParam string) ([]byte, error)
-}
-
 type server struct {
 	router       *mux.Router
 	version      *apiVersion

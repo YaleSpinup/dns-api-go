@@ -1,7 +1,7 @@
 package services
 
 import (
-	"dns-api-go/api"
+	"dns-api-go/common"
 	"encoding/json"
 	"fmt"
 )
@@ -26,11 +26,11 @@ type EntityService interface {
 }
 
 type GenericEntityService struct {
-	server api.ServerInterface
+	server common.ServerInterface
 }
 
 // NewGenericEntityService Constructor for GenericEntityService
-func NewGenericEntityService(server api.ServerInterface) *GenericEntityService {
+func NewGenericEntityService(server common.ServerInterface) *GenericEntityService {
 	return &GenericEntityService{server: server}
 }
 
