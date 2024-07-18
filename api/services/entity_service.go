@@ -51,7 +51,7 @@ func (es *GenericEntityService) GetEntityByID(id string, includeHA string) (*Ent
 	}
 	// Check if the response represents an empty entity
 	if entityResp.ID == 0 && entityResp.Name == nil && entityResp.Type == nil && entityResp.Properties == nil {
-		return nil, fmt.Errorf("entity not found")
+		return nil, &ErrEntityNotFound{}
 	}
 
 	// Convert EntityResponse to Entity
@@ -65,6 +65,42 @@ func (es *GenericEntityService) GetEntityByID(id string, includeHA string) (*Ent
 	return entity, nil
 }
 
+var ALLOWDELETE = []string{
+	"HOSTRECORD",
+	"EXTERNALHOST",
+	"CNAMERECORD",
+	"IP4ADDRESS",
+	"MACADDRESS",
+	"MACPOOL",
+}
+
 func (es *GenericEntityService) DeleteEntityByID(id string) error {
+	// Get the entity type and check if it can be deleted
+	entity, err := es.GetEntityByID(id, "false")
+	if err != nil {
+		return err
+	}
+
+	isAllowedToDelete := false
+	for _, allowedType := range ALLOWDELETE {
+		if entity.Type == allowedType {
+			isAllowedToDelete = true
+			break
+		}
+	}
+
+	if !isAllowedToDelete {
+		return &ErrDeleteNotAllowed{Type: entity.Type}
+	}
+
+	// Send http request to bluecat
+	route, params := "/delete", fmt.Sprintf("id=#{id}")
+	_, err = es.server.MakeRequest(route, params)
+
+	// Check for errors while sending request
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

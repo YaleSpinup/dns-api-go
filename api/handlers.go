@@ -18,6 +18,7 @@ package api
 
 import (
 	"crypto/tls"
+	"dns-api-go/api/services"
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
@@ -236,12 +237,12 @@ func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 
 		entity, err := s.services.EntityService.GetEntityByID(id, includeHA)
 		if err != nil {
-			if err.Error() == "entity not found" {
-				http.Error(w, "Entity not found", http.StatusNotFound)
-			} else {
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			switch e := err.(type) {
+			case *services.ErrEntityNotFound:
+				http.Error(w, e.Error(), http.StatusNotFound)
+			default:
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
-			return
 		}
 
 		// marshal entity into JSON and return response
@@ -252,8 +253,15 @@ func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Failed to write response: %v", err)
 		}
 	case http.MethodDelete:
-		// Respond with "not implemented yet" for DELETE requests
-		http.Error(w, "Not implemented yet", http.StatusNotImplemented)
+		err := s.services.EntityService.DeleteEntityByID(id)
+		if err != nil {
+			switch e := err.(type) {
+			case *services.ErrDeleteNotAllowed:
+				http.Error(w, e.Error(), http.StatusNotFound)
+			default:
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		}
 	default:
 		// Method not allowed
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
