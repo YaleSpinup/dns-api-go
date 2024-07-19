@@ -17,10 +17,24 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package api
 
 import (
+	"dns-api-go/logger"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	// Setup phase: Initialize the logger
+	logger.InitializeDefault()
+	defer logger.Sync() // Ensure to flush/sync the logger after tests
+
+	// Run the tests
+	code := m.Run()
+
+	// Exit with the code from m.Run()
+	os.Exit(code)
+}
 
 func TestPingHandler(t *testing.T) {
 	req, err := http.NewRequest("GET", "/v1/test/ping", nil)

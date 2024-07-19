@@ -231,6 +231,7 @@ func (s *server) GetRecordHintHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
+// EntityIdHandler handles requests related to entity IDs, supporting both retrieval and deletion based on the request method.
 func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract entity ID and includeHA parameters from the request URL
 	vars := mux.Vars(r)
