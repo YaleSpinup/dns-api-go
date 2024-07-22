@@ -17,22 +17,25 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package api
 
 import (
+	"dns-api-go/logger"
 	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 	"net/http"
 	"net/url"
 
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // TokenMiddleware checks the tokens for non-public URLs
 func TokenMiddleware(psk []byte, public map[string]string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Debug("Processing token middleware for protected URLs")
+		logger.Debug("Processing token middleware for protected URLs",
+			zap.String("method", r.Method),
+			zap.String("requestURI", r.RequestURI))
 
 		// Handle CORS preflight checks
 		if r.Method == "OPTIONS" {
-			log.Info("Setting CORS preflight options and returning")
+			logger.Info("Setting CORS preflight options and returning")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Headers", "X-Auth-Token")
 			w.WriteHeader(http.StatusOK)
@@ -42,24 +45,26 @@ func TokenMiddleware(psk []byte, public map[string]string, h http.Handler) http.
 
 		uri, err := url.ParseRequestURI(r.RequestURI)
 		if err != nil {
-			log.Error("Unable to parse request URI ", err)
+			logger.Error("Unable to parse request URI", zap.Error(err))
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		if _, ok := public[uri.Path]; ok {
-			log.Debugf("Not authenticating for '%s'", uri.Path)
+			logger.Debug("Not authenticating for public URL", zap.String("path", uri.Path))
 		} else {
-			log.Debugf("Authenticating token for protected URL '%s'", r.URL)
+			logger.Debug("Authenticating token for protected URL", zap.String("URL", r.URL.String()))
 
 			htoken := r.Header.Get("X-Auth-Token")
 			if err := bcrypt.CompareHashAndPassword([]byte(htoken), psk); err != nil {
-				log.Warnf("Unable to authenticate session for URL '%s': '%s'", r.URL, err)
+				logger.Warn("Unable to authenticate session for URL",
+					zap.String("URL", r.URL.String()),
+					zap.Error(err))
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
 
-			log.Infof("Successfully authenticated token for URL '%s'", r.URL)
+			logger.Info("Successfully authenticated token for URL", zap.String("URL", r.URL.String()))
 		}
 
 		h.ServeHTTP(w, r)
@@ -68,20 +73,27 @@ func TokenMiddleware(psk []byte, public map[string]string, h http.Handler) http.
 
 func (s *server) AccountValidationMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger.Info("AccountValidationMiddleware invoked", zap.String("path", r.URL.Path))
+
 		// Validate the account
 		vars := mux.Vars(r)
 		account, accountOk := vars["account"]
 		// Check parameter
 		if !accountOk {
+			logger.Warn("Missing required parameter: account", zap.String("path", r.URL.Path))
 			http.Error(w, "Missing required parameter: account", http.StatusBadRequest)
 			return
 		}
 
 		if s.bluecat.account != account {
+			logger.Warn("Invalid account attempt",
+				zap.String("providedAccount", account),
+				zap.String("expectedAccount", s.bluecat.account))
 			http.Error(w, "Invalid account", http.StatusBadRequest)
 			return
 		}
 
+		logger.Info("Account validated successfully", zap.String("account", account))
 		h.ServeHTTP(w, r)
 	})
 }
