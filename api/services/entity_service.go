@@ -23,8 +23,8 @@ type EntityResponse struct {
 }
 
 type EntityService interface {
-	GetEntityByID(id string, includeHA string) (*Entity, error)
-	DeleteEntityByID(id string) error
+	GetEntityByID(id int, includeHA bool) (*Entity, error)
+	DeleteEntityByID(id int) error
 }
 
 type GenericEntityService struct {
@@ -36,11 +36,11 @@ func NewGenericEntityService(server common.ServerInterface) *GenericEntityServic
 	return &GenericEntityService{server: server}
 }
 
-func (es *GenericEntityService) GetEntityByID(id string, includeHA string) (*Entity, error) {
-	logger.Info("GetEntityByID started", zap.String("id", id), zap.String("includeHA", includeHA))
+func (es *GenericEntityService) GetEntityByID(id int, includeHA bool) (*Entity, error) {
+	logger.Info("GetEntityByID started", zap.Int("id", id), zap.Bool("includeHA", includeHA))
 
 	// Send http request to bluecat
-	route, params := "/getEntityById", fmt.Sprintf("id=%s&includeHA=%s", id, includeHA)
+	route, params := "/getEntityById", fmt.Sprintf("id=%d&includeHA=%t", id, includeHA)
 	resp, err := es.server.MakeRequest(route, params)
 
 	// Check for errors when sending request
@@ -57,7 +57,7 @@ func (es *GenericEntityService) GetEntityByID(id string, includeHA string) (*Ent
 	}
 	// Check if the response represents an empty entity
 	if entityResp.ID == 0 && entityResp.Name == nil && entityResp.Type == nil && entityResp.Properties == nil {
-		logger.Info("Entity not found", zap.String("id", id))
+		logger.Info("Entity not found", zap.Int("id", id))
 		return nil, &ErrEntityNotFound{}
 	}
 
@@ -84,11 +84,11 @@ var ALLOWDELETE = []string{
 	"MACPOOL",
 }
 
-func (es *GenericEntityService) DeleteEntityByID(id string) error {
-	logger.Info("DeleteEntityByID started", zap.String("id", id))
+func (es *GenericEntityService) DeleteEntityByID(id int) error {
+	logger.Info("DeleteEntityByID started", zap.Int("id", id))
 
 	// Get the entity type
-	entity, err := es.GetEntityByID(id, "false")
+	entity, err := es.GetEntityByID(id, false)
 	if err != nil {
 		return err
 	}
@@ -103,12 +103,12 @@ func (es *GenericEntityService) DeleteEntityByID(id string) error {
 	}
 
 	if !isAllowedToDelete {
-		logger.Info("Entity deletion not allowed", zap.String("id", id), zap.String("type", entity.Type))
+		logger.Info("Entity deletion not allowed", zap.Int("id", id), zap.String("type", entity.Type))
 		return &ErrDeleteNotAllowed{Type: entity.Type}
 	}
 
 	// Send http request to bluecat
-	route, params := "/delete", fmt.Sprintf("id=%s", id)
+	route, params := "/delete", fmt.Sprintf("id=%d", id)
 	_, err = es.server.MakeRequest(route, params)
 
 	// Check for errors while sending request
@@ -116,6 +116,6 @@ func (es *GenericEntityService) DeleteEntityByID(id string) error {
 		return err
 	}
 
-	logger.Info("DeleteEntityByID successful", zap.String("id", id))
+	logger.Info("DeleteEntityByID successful", zap.Int("id", id))
 	return nil
 }

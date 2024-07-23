@@ -26,6 +26,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -233,10 +234,9 @@ func (s *server) GetRecordHintHandler(w http.ResponseWriter, r *http.Request) {
 
 // EntityIdHandler handles requests related to entity IDs, supporting both retrieval and deletion based on the request method.
 func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
-	// Extract entity ID and includeHA parameters from the request URL
+	// Extract entity ID parameter from the request URL
 	vars := mux.Vars(r)
-	id, idOk := vars["id"]
-	includeHA := r.URL.Query().Get("includeHA")
+	idStr, idOk := vars["id"]
 
 	// Validate the presence of the required 'id' parameter
 	if !idOk {
@@ -245,13 +245,24 @@ func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing required parameter: id", http.StatusBadRequest)
 		return
 	}
+	// Convert id from string to int
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		logger.Error("Invalid ID format",
+			zap.String("id", idStr),
+			zap.Error(err))
+		http.Error(w, "Invalid ID format", http.StatusBadRequest)
+		return
+	}
 
 	// Handle requests based on the HTTP method
 	switch r.Method {
 	case http.MethodGet:
 		// Default includeHA to "true" if not specified
-		if includeHA == "" {
-			includeHA = "true"
+		includeHAStr := r.URL.Query().Get("includeHA")
+		includeHA, err := strconv.ParseBool(includeHAStr)
+		if err != nil {
+			includeHA = true
 		}
 
 		// Attempt to retrieve the entity by ID and handle potential errors
@@ -259,8 +270,8 @@ func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			// Log the error and respond with appropriate HTTP status
 			logger.Error("Error retrieving entity by ID",
-				zap.String("id", id),
-				zap.String("includeHA", includeHA),
+				zap.Int("id", id),
+				zap.Bool("includeHA", includeHA),
 				zap.String("method", r.Method),
 				zap.Error(err))
 
@@ -268,8 +279,10 @@ func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 			switch e := err.(type) {
 			case *services.ErrEntityNotFound:
 				http.Error(w, e.Error(), http.StatusNotFound)
+				return
 			default:
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
 			}
 		}
 
@@ -295,7 +308,7 @@ func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			// Log the error and respond with appropriate HTTP status
 			logger.Error("Error deleting entity by ID",
-				zap.String("id", id),
+				zap.Int("id", id),
 				zap.String("method", r.Method),
 				zap.Error(err))
 
@@ -303,8 +316,10 @@ func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 			switch e := err.(type) {
 			case *services.ErrDeleteNotAllowed:
 				http.Error(w, e.Error(), http.StatusNotFound)
+				return
 			default:
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
 			}
 		}
 
