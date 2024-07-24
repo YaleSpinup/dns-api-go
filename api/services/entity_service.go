@@ -36,6 +36,7 @@ func NewGenericEntityService(server common.ServerInterface) *GenericEntityServic
 	return &GenericEntityService{server: server}
 }
 
+// GetEntityByID Retrieves an entity by ID from bluecat
 func (es *GenericEntityService) GetEntityByID(id int, includeHA bool) (*Entity, error) {
 	logger.Info("GetEntityByID started", zap.Int("id", id), zap.Bool("includeHA", includeHA))
 
@@ -62,17 +63,35 @@ func (es *GenericEntityService) GetEntityByID(id int, includeHA bool) (*Entity, 
 	}
 
 	// Convert EntityResponse to Entity
-	entity := &Entity{
-		ID:         entityResp.ID,
-		Name:       *entityResp.Name,
-		Type:       *entityResp.Type,
-		Properties: *entityResp.Properties,
-	}
+	entity := entityResp.ToEntity()
 
 	logger.Info("GetEntityByID successful",
 		zap.Int("entityID", entity.ID),
 		zap.String("entityType", entity.Type))
 	return entity, nil
+}
+
+// ToEntity Converts EntityResponse to Entity
+func (er *EntityResponse) ToEntity() *Entity {
+	// Handle nil pointer dereference if name or properties is null
+	// Type is guaranteed to be non-nil unless entity does not exist, in which case it is handled earlier
+	var name, properties string
+	if er.Name != nil {
+		name = *er.Name
+	}
+	if er.Properties != nil {
+		properties = *er.Properties
+	}
+
+	// Convert EntityResponse to Entity
+	entity := &Entity{
+		ID:         er.ID,
+		Name:       name,
+		Type:       *er.Type,
+		Properties: properties,
+	}
+
+	return entity
 }
 
 var ALLOWDELETE = []string{
@@ -84,6 +103,7 @@ var ALLOWDELETE = []string{
 	"MACPOOL",
 }
 
+// DeleteEntityByID Deletes an entity by ID from bluecat
 func (es *GenericEntityService) DeleteEntityByID(id int) error {
 	logger.Info("DeleteEntityByID started", zap.Int("id", id))
 
