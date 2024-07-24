@@ -24,7 +24,6 @@ type EntityResponse struct {
 
 type EntityService interface {
 	GetEntityByID(id int, includeHA bool) (*Entity, error)
-	DeleteEntityByID(id int) error
 }
 
 type GenericEntityService struct {
