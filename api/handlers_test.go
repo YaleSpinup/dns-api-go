@@ -17,7 +17,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package api
 
 import (
-	"dns-api-go/logger"
+	"dns-api-go/common"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -26,8 +26,7 @@ import (
 
 func TestMain(m *testing.M) {
 	// Setup phase: Initialize the logger
-	logger.InitializeDefault()
-	defer logger.Sync() // Ensure to flush/sync the logger after tests
+	common.SetupLogger()
 
 	// Run the tests
 	code := m.Run()
