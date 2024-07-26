@@ -96,16 +96,14 @@ func TestGetEntityByID(t *testing.T) {
 			entityService := NewGenericEntityService(mockServer)
 			entity, err := entityService.GetEntityByID(tc.entityId, tc.includeHA)
 
-			// Check for specific ErrEntityNotFound error
+			// If json unmarshalling error, check that any error is returned
 			if tc.expectedError != nil && tc.expectedError.Error() == "Simulating unmarshal error" {
 				if err == nil {
 					t.Errorf("%s: expected an unmarshal error, got nil", tc.name)
 				}
-				// For other errors, just check that an error was returned
-			} else if tc.expectedError != nil {
-				if !errors.Is(err, tc.expectedError) {
-					t.Errorf("%s: expected error %v, got %v", tc.name, tc.expectedError, err)
-				}
+				// For other errors, check if returned error matches expected error
+			} else if tc.expectedError != nil && !common.CompareErrors(tc.expectedError, err) {
+				t.Errorf("%s: expected error %v, got %v", tc.name, tc.expectedError, err)
 				// No error expected
 			} else if tc.expectedError == nil && err != nil {
 				t.Errorf("%s: expected no error, got %v", tc.name, err)
@@ -203,7 +201,7 @@ func TestDeleteEntityByID(t *testing.T) {
 			mockMakeReqGetEntByIDResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
-				"type": "HOSTRECORD",
+				"type": "INVALIDTYPE",
 				"properties": "TestProperties"
 			}`),
 			mockMakeReqGetEntByIDError: nil,
@@ -241,7 +239,7 @@ func TestDeleteEntityByID(t *testing.T) {
 
 			entityService := NewGenericEntityService(mockServer)
 			err := entityService.DeleteEntityByID(tc.entityId)
-			if tc.expectedError != nil && !errors.Is(err, tc.expectedError) {
+			if tc.expectedError != nil && !common.CompareErrors(tc.expectedError, err) {
 				t.Errorf("%s: expected error %v, got %v", tc.name, tc.expectedError, err)
 			} else if tc.expectedError == nil && err != nil {
 				t.Errorf("%s: expected no error, got %v", tc.name, err)
