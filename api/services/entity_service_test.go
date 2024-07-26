@@ -6,6 +6,7 @@ import (
 	"github.com/pkg/errors"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -25,7 +26,7 @@ func TestGetEntityByID(t *testing.T) {
 		name                    string
 		entityId                int
 		includeHA               bool
-		mockMakeRequestResponse string
+		mockMakeRequestResponse []byte
 		mockMakeRequestError    error
 		expectedResponse        *Entity
 		expectedError           error
@@ -34,12 +35,12 @@ func TestGetEntityByID(t *testing.T) {
 			name:      "Successful retrieval",
 			entityId:  1,
 			includeHA: true,
-			mockMakeRequestResponse: `{
+			mockMakeRequestResponse: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HOSTRECORD",
 				"properties": "TestProperties"
-			}`,
+			}`),
 			mockMakeRequestError: nil,
 			expectedResponse: &Entity{
 				ID:         1,
@@ -53,12 +54,12 @@ func TestGetEntityByID(t *testing.T) {
 			name:      "Entity not found",
 			entityId:  999,
 			includeHA: true,
-			mockMakeRequestResponse: `{
+			mockMakeRequestResponse: []byte(`{
 				"id": 0,
 				"name": null,
 				"type": null,
 				"properties": null
-			}`,
+			}`),
 			mockMakeRequestError: nil,
 			expectedResponse:     nil,
 			expectedError:        &ErrEntityNotFound{},
@@ -67,19 +68,19 @@ func TestGetEntityByID(t *testing.T) {
 			name:                    "JSON unmarshal error",
 			entityId:                1,
 			includeHA:               true,
-			mockMakeRequestResponse: "{invalidJson}",
+			mockMakeRequestResponse: []byte("{invalidJson}"),
 			mockMakeRequestError:    nil,
 			expectedResponse:        nil,
-			expectedError:           errors.New("simulating unmarshal error"),
+			expectedError:           errors.New("Simulating unmarshal error"),
 		},
 		{
 			name:                    "MakeRequest Error",
 			entityId:                -1,
 			includeHA:               true,
-			mockMakeRequestResponse: "",
-			mockMakeRequestError:    errors.New("simulating server response error"),
+			mockMakeRequestResponse: nil,
+			mockMakeRequestError:    errors.New("Simulating MakeRequest error"),
 			expectedResponse:        nil,
-			expectedError:           errors.New("simulating server response error"),
+			expectedError:           errors.New("Simulating MakeRequest error"),
 		},
 	}
 
@@ -87,7 +88,7 @@ func TestGetEntityByID(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mockServer := &mocks.MockServer{
 				MakeRequestFunc: func(route, queryParam string) ([]byte, error) {
-					return []byte(tc.mockMakeRequestResponse), tc.mockMakeRequestError
+					return tc.mockMakeRequestResponse, tc.mockMakeRequestError
 				},
 			}
 
@@ -95,13 +96,15 @@ func TestGetEntityByID(t *testing.T) {
 			entity, err := entityService.GetEntityByID(tc.entityId, tc.includeHA)
 
 			// Check for specific ErrEntityNotFound error
-			if _, ok := tc.expectedError.(*ErrEntityNotFound); ok {
-				if !errors.Is(err, tc.expectedError) {
-					t.Errorf("%s: expected ErrEntityNotFound, got %v", tc.name, err)
+			if tc.expectedError != nil && tc.expectedError.Error() == "Simulating unmarshal error" {
+				if err == nil {
+					t.Errorf("%s: expected an unmarshal error, got nil", tc.name)
 				}
 				// For other errors, just check that an error was returned
-			} else if tc.expectedError != nil && err == nil {
-				t.Errorf("%s: expected an error, got nil", tc.name)
+			} else if tc.expectedError != nil {
+				if !errors.Is(err, tc.expectedError) {
+					t.Errorf("%s: expected error %v, got %v", tc.name, tc.expectedError, err)
+				}
 				// No error expected
 			} else if tc.expectedError == nil && err != nil {
 				t.Errorf("%s: expected no error, got %v", tc.name, err)
@@ -158,6 +161,89 @@ func TestToEntity(t *testing.T) {
 			entity := tc.entityResponse.ToEntity()
 			if !reflect.DeepEqual(entity, tc.expectedEntity) {
 				t.Errorf("%s: expected response %+v, got %+v", tc.name, tc.expectedEntity, entity)
+			}
+		})
+	}
+}
+
+func TestDeleteEntityByID(t *testing.T) {
+	tests := []struct {
+		name                       string
+		entityId                   int
+		mockMakeReqGetEntByIDResp  []byte
+		mockMakeReqGetEntByIDError error
+		mockMakeReqDelEntByIDError error
+		expectedError              error
+	}{
+		{
+			name:     "Successful deletion",
+			entityId: 1,
+			mockMakeReqGetEntByIDResp: []byte(`{
+				"id": 1,
+				"name": "Test Entity",
+				"type": "HOSTRECORD",
+				"properties": "TestProperties"
+			}`),
+			mockMakeReqGetEntByIDError: nil,
+			mockMakeReqDelEntByIDError: nil,
+			expectedError:              nil,
+		},
+		{
+			name:                       "GetEntityByID error",
+			entityId:                   999,
+			mockMakeReqGetEntByIDResp:  nil,
+			mockMakeReqGetEntByIDError: errors.New("Simulating GetEntityByID error"),
+			mockMakeReqDelEntByIDError: nil,
+			expectedError:              errors.New("Simulating GetEntityByID error"),
+		},
+		{
+			name:     "Entity deletion not allowed",
+			entityId: 1,
+			mockMakeReqGetEntByIDResp: []byte(`{
+				"id": 1,
+				"name": "Test Entity",
+				"type": "HOSTRECORD",
+				"properties": "TestProperties"
+			}`),
+			mockMakeReqGetEntByIDError: nil,
+			mockMakeReqDelEntByIDError: nil,
+			expectedError:              &ErrDeleteNotAllowed{Type: "INVALIDTYPE"},
+		},
+		{
+			name:     "MakeRequest error",
+			entityId: 1,
+			mockMakeReqGetEntByIDResp: []byte(`{
+				"id": 1,
+				"name": "Test Entity",
+				"type": "HOSTRECORD",
+				"properties": "TestProperties"
+			}`),
+			mockMakeReqGetEntByIDError: nil,
+			mockMakeReqDelEntByIDError: errors.New("Simulating MakeRequest error"),
+			expectedError:              errors.New("Simulating MakeRequest error"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockServer := &mocks.MockServer{
+				MakeRequestFunc: func(route, queryParam string) ([]byte, error) {
+					if strings.Contains(route, "getEntityById") {
+						return tc.mockMakeReqGetEntByIDResp, tc.mockMakeReqGetEntByIDError
+					} else if strings.Contains(route, "delete") {
+						return nil, tc.mockMakeReqDelEntByIDError
+					} else {
+						return nil, errors.New("unexpected route")
+					}
+				},
+			}
+
+			entityService := NewGenericEntityService(mockServer)
+			err := entityService.DeleteEntityByID(tc.entityId)
+			if tc.expectedError != nil && !errors.Is(err, tc.expectedError) {
+				t.Errorf("%s: expected error %v, got %v", tc.name, tc.expectedError, err)
+			} else if tc.expectedError == nil && err != nil {
+				t.Errorf("%s: expected no error, got %v", tc.name, err)
 			}
 		})
 	}
