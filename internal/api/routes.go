@@ -31,13 +31,18 @@ func (s *server) routes() {
 	api.HandleFunc("/systeminfo", s.SystemInfoHandler).Methods(http.MethodGet)
 	api.HandleFunc("/record/hint", s.GetRecordHintHandler).Methods(http.MethodGet)
 
+	// Create a subrouter for routes that need account validation
+	accountRouter := api.PathPrefix("/{account}").Subrouter()
+
+	// Apply the middleware to all routes in this subrouter
+	accountRouter.Use(s.AccountValidationMiddleware)
+
 	// Custom search based on type and filters
 	api.HandleFunc("/search", s.ProxyRequestHandler).Methods(http.MethodGet)
 
 	// Manage entities by ID
-	api.HandleFunc("/{account}/id/{id}", func(w http.ResponseWriter, r *http.Request) {
-		s.AccountValidationMiddleware(http.HandlerFunc(s.EntityIdHandler)).ServeHTTP(w, r)
-	}).Methods(http.MethodGet, http.MethodDelete)
+	accountRouter.HandleFunc("/{account}/id/{id}", s.GetEntityByIdHandler).Methods(http.MethodGet)
+	accountRouter.HandleFunc("/{account}/id/{id}", s.DeleteEntityByIdHandler).Methods(http.MethodDelete)
 
 	// Manage Zones
 	api.HandleFunc("/{account}/zones", s.ProxyRequestHandler).Methods(http.MethodGet)

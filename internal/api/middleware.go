@@ -71,14 +71,10 @@ func TokenMiddleware(psk []byte, public map[string]string, h http.Handler) http.
 	})
 }
 
-func (s *server) AccountValidationMiddleware(h http.Handler) http.Handler {
+func (s *server) AccountValidationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger.Info("AccountValidationMiddleware invoked", zap.String("path", r.URL.Path))
-
-		// Validate the account
 		vars := mux.Vars(r)
 		account, accountOk := vars["account"]
-		// Check parameter
 		if !accountOk {
 			logger.Warn("Missing required parameter: account", zap.String("path", r.URL.Path))
 			http.Error(w, "Missing required parameter: account", http.StatusBadRequest)
@@ -94,6 +90,6 @@ func (s *server) AccountValidationMiddleware(h http.Handler) http.Handler {
 		}
 
 		logger.Info("Account validated successfully", zap.String("account", account))
-		h.ServeHTTP(w, r)
+		next.ServeHTTP(w, r)
 	})
 }
