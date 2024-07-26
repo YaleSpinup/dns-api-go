@@ -17,7 +17,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package api
 
 import (
-	"dns-api-go/common"
+	"dns-api-go/internal/common"
 	"net/http"
 	"net/http/httptest"
 	"os"

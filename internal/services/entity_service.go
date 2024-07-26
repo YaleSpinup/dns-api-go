@@ -1,19 +1,13 @@
 package services
 
 import (
-	"dns-api-go/common"
+	"dns-api-go/internal/interfaces"
+	"dns-api-go/internal/models"
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
 )
-
-type Entity struct {
-	ID         int
-	Name       string
-	Type       string
-	Properties string
-}
 
 type EntityResponse struct {
 	ID         int     `json:"id"`
@@ -22,21 +16,17 @@ type EntityResponse struct {
 	Properties *string `json:"properties"`
 }
 
-type EntityService interface {
-	GetEntityByID(id int, includeHA bool) (*Entity, error)
-}
-
 type GenericEntityService struct {
-	server common.ServerInterface
+	server interfaces.ServerInterface
 }
 
 // NewGenericEntityService Constructor for GenericEntityService
-func NewGenericEntityService(server common.ServerInterface) *GenericEntityService {
+func NewGenericEntityService(server interfaces.ServerInterface) *GenericEntityService {
 	return &GenericEntityService{server: server}
 }
 
 // GetEntityByID Retrieves an entity by ID from bluecat
-func (es *GenericEntityService) GetEntityByID(id int, includeHA bool) (*Entity, error) {
+func (es *GenericEntityService) GetEntityByID(id int, includeHA bool) (*models.Entity, error) {
 	logger.Info("GetEntityByID started", zap.Int("id", id), zap.Bool("includeHA", includeHA))
 
 	// Send http request to bluecat
@@ -71,7 +61,7 @@ func (es *GenericEntityService) GetEntityByID(id int, includeHA bool) (*Entity, 
 }
 
 // ToEntity Converts EntityResponse to Entity
-func (er *EntityResponse) ToEntity() *Entity {
+func (er *EntityResponse) ToEntity() *models.Entity {
 	// Handle nil pointer dereference if name or properties is null
 	// Type is guaranteed to be non-nil unless entity does not exist, in which case it is handled earlier
 	var name, properties string
@@ -83,7 +73,7 @@ func (er *EntityResponse) ToEntity() *Entity {
 	}
 
 	// Convert EntityResponse to Entity
-	entity := &Entity{
+	entity := &models.Entity{
 		ID:         er.ID,
 		Name:       name,
 		Type:       *er.Type,

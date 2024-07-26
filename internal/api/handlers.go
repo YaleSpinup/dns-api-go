@@ -18,7 +18,7 @@ package api
 
 import (
 	"crypto/tls"
-	"dns-api-go/api/services"
+	"dns-api-go/internal/services"
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
@@ -266,7 +266,7 @@ func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Attempt to retrieve the entity by ID and handle potential errors
-		entity, err := s.services.EntityService.GetEntityByID(id, includeHA)
+		entity, err := s.services.GenericEntityService.GetEntityByID(id, includeHA)
 		if err != nil {
 			// Log the error and respond with appropriate HTTP status
 			logger.Error("Error retrieving entity by ID",
@@ -304,7 +304,7 @@ func (s *server) EntityIdHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	case http.MethodDelete:
 		// Attempt to delete the entity by ID and handle potential errors
-		err := s.services.EntityService.DeleteEntityByID(id)
+		err := s.services.GenericEntityService.DeleteEntityByID(id)
 		if err != nil {
 			// Log the error and respond with appropriate HTTP status
 			logger.Error("Error deleting entity by ID",

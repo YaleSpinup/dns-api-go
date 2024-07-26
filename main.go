@@ -27,8 +27,8 @@ import (
 	"net/http"
 	"os"
 
-	"dns-api-go/api"
-	"dns-api-go/common"
+	"dns-api-go/internal/api"
+	"dns-api-go/internal/common"
 
 	"dns-api-go/logger"
 )

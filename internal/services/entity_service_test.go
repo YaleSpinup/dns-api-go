@@ -1,8 +1,9 @@
 package services
 
 import (
-	"dns-api-go/api/mocks"
-	"dns-api-go/common"
+	"dns-api-go/internal/common"
+	"dns-api-go/internal/mocks"
+	"dns-api-go/internal/models"
 	"github.com/pkg/errors"
 	"os"
 	"reflect"
@@ -28,7 +29,7 @@ func TestGetEntityByID(t *testing.T) {
 		includeHA               bool
 		mockMakeRequestResponse []byte
 		mockMakeRequestError    error
-		expectedResponse        *Entity
+		expectedResponse        *models.Entity
 		expectedError           error
 	}{
 		{
@@ -42,7 +43,7 @@ func TestGetEntityByID(t *testing.T) {
 				"properties": "TestProperties"
 			}`),
 			mockMakeRequestError: nil,
-			expectedResponse: &Entity{
+			expectedResponse: &models.Entity{
 				ID:         1,
 				Name:       "Test Entity",
 				Type:       "HOSTRECORD",
@@ -122,7 +123,7 @@ func TestToEntity(t *testing.T) {
 	tests := []struct {
 		name           string
 		entityResponse EntityResponse
-		expectedEntity *Entity
+		expectedEntity *models.Entity
 	}{
 		{
 			name: "All fields present",
@@ -132,7 +133,7 @@ func TestToEntity(t *testing.T) {
 				Type:       common.StringPtr("HOSTRECORD"),
 				Properties: common.StringPtr("Test Properties"),
 			},
-			expectedEntity: &Entity{
+			expectedEntity: &models.Entity{
 				ID:         1,
 				Name:       "Test Entity",
 				Type:       "HOSTRECORD",
@@ -147,7 +148,7 @@ func TestToEntity(t *testing.T) {
 				Type:       common.StringPtr("HOSTRECORD"),
 				Properties: nil,
 			},
-			expectedEntity: &Entity{
+			expectedEntity: &models.Entity{
 				ID:         1,
 				Name:       "",
 				Type:       "HOSTRECORD",

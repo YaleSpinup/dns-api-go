@@ -18,7 +18,7 @@ package api
 
 import (
 	"context"
-	"dns-api-go/api/services"
+	"dns-api-go/internal/services"
 	"encoding/json"
 	"errors"
 	"math/rand"
@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"dns-api-go/common"
 	"dns-api-go/iam"
+	"dns-api-go/internal/common"
 	"dns-api-go/session"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -67,7 +67,7 @@ type bluecat struct {
 }
 
 type Services struct {
-	EntityService services.EntityService
+	GenericEntityService *services.GenericEntityService
 }
 
 type server struct {
@@ -124,7 +124,7 @@ func NewServer(config common.Config) error {
 
 	// Define services that interact with Bluecat entities
 	s.services = Services{
-		EntityService: services.NewGenericEntityService(&s),
+		GenericEntityService: services.NewGenericEntityService(&s),
 	}
 
 	if b := config.ProxyBackend; b != nil {
