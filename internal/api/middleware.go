@@ -71,16 +71,16 @@ func TokenMiddleware(psk []byte, public map[string]string, h http.Handler) http.
 	})
 }
 
+// AccountValidationMiddleware is a middleware function that validates the account parameter
+// in the request URL. If the account is invalid, it returns a 400 Bad Request response.
+// Otherwise, it allows the request to proceed to the next handler.
 func (s *server) AccountValidationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Extract the account parameter from the URL variables
 		vars := mux.Vars(r)
-		account, accountOk := vars["account"]
-		if !accountOk {
-			logger.Warn("Missing required parameter: account", zap.String("path", r.URL.Path))
-			http.Error(w, "Missing required parameter: account", http.StatusBadRequest)
-			return
-		}
+		account := vars["account"]
 
+		// Check if the provided account matches the expected account
 		if s.bluecat.account != account {
 			logger.Warn("Invalid account attempt",
 				zap.String("providedAccount", account),
@@ -89,6 +89,7 @@ func (s *server) AccountValidationMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// Proceed to the next handler since the account is valid
 		logger.Info("Account validated successfully", zap.String("account", account))
 		next.ServeHTTP(w, r)
 	})
