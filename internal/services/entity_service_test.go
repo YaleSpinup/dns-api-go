@@ -39,14 +39,14 @@ func TestGetEntityByID(t *testing.T) {
 			mockMakeRequestResponse: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
-				"type": "HOSTRECORD",
+				"type": "HostRecord",
 				"properties": "TestProperties"
 			}`),
 			mockMakeRequestError: nil,
 			expectedResponse: &models.Entity{
 				ID:         1,
 				Name:       "Test Entity",
-				Type:       "HOSTRECORD",
+				Type:       "HostRecord",
 				Properties: "TestProperties",
 			},
 			expectedError: nil,
@@ -128,13 +128,13 @@ func TestToEntity(t *testing.T) {
 			entityResponse: EntityResponse{
 				ID:         1,
 				Name:       common.StringPtr("Test Entity"),
-				Type:       common.StringPtr("HOSTRECORD"),
+				Type:       common.StringPtr("HostRecord"),
 				Properties: common.StringPtr("Test Properties"),
 			},
 			expectedEntity: &models.Entity{
 				ID:         1,
 				Name:       "Test Entity",
-				Type:       "HOSTRECORD",
+				Type:       "HostRecord",
 				Properties: "Test Properties",
 			},
 		},
@@ -143,13 +143,13 @@ func TestToEntity(t *testing.T) {
 			entityResponse: EntityResponse{
 				ID:         1,
 				Name:       nil,
-				Type:       common.StringPtr("HOSTRECORD"),
+				Type:       common.StringPtr("HostRecord"),
 				Properties: nil,
 			},
 			expectedEntity: &models.Entity{
 				ID:         1,
 				Name:       "",
-				Type:       "HOSTRECORD",
+				Type:       "HostRecord",
 				Properties: "",
 			},
 		},
@@ -180,7 +180,7 @@ func TestDeleteEntityByID(t *testing.T) {
 			mockMakeReqGetEntByIDResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
-				"type": "HOSTRECORD",
+				"type": "HostRecord",
 				"properties": "TestProperties"
 			}`),
 			mockMakeReqGetEntByIDError: nil,
@@ -214,7 +214,7 @@ func TestDeleteEntityByID(t *testing.T) {
 			mockMakeReqGetEntByIDResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
-				"type": "HOSTRECORD",
+				"type": "HostRecord",
 				"properties": "TestProperties"
 			}`),
 			mockMakeReqGetEntByIDError: nil,
