@@ -117,7 +117,7 @@ func (es *GenericEntityService) DeleteEntityByID(id int) error {
 	}
 
 	// Send http request to bluecat
-	route, params := "/delete", fmt.Sprintf("id=%d", id)
+	route, params := "/delete", fmt.Sprintf("objectId=%d", id)
 	_, err = es.server.MakeRequest("DELETE", route, params)
 
 	// Check for errors while sending request
