@@ -84,12 +84,12 @@ func (er *EntityResponse) ToEntity() *models.Entity {
 }
 
 var ALLOWDELETE = []string{
-	"HOSTRECORD",
-	"EXTERNALHOST",
-	"CNAMERECORD",
-	"IP4ADDRESS",
-	"MACADDRESS",
-	"MACPOOL",
+	"HostRecord",
+	"ExternalHostRecord",
+	"AliasRecord",
+	"IP4Address",
+	"MACAddress",
+	"MACPool",
 }
 
 // DeleteEntityByID Deletes an entity by ID from bluecat
