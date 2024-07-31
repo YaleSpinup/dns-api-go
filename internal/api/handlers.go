@@ -102,7 +102,7 @@ func (s *server) getToken() (string, error) {
 	return s.bluecat.token, nil
 }
 
-func (s *server) MakeRequest(route, queryParam string) ([]byte, error) {
+func (s *server) MakeRequest(method, route, queryParam string) ([]byte, error) {
 	// Construct the API URL
 	apiURL := s.bluecat.baseUrl + route
 	if queryParam != "" {
@@ -112,7 +112,7 @@ func (s *server) MakeRequest(route, queryParam string) ([]byte, error) {
 	logger.Debug("API URL", zap.String("URL", apiURL))
 
 	// Create a new HTTP request
-	req, err := http.NewRequest("GET", apiURL, nil)
+	req, err := http.NewRequest(strings.ToUpper(method), apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating HTTP request: %v", err)
 	}
@@ -149,7 +149,7 @@ func (s *server) MakeRequest(route, queryParam string) ([]byte, error) {
 		s.bluecat.token = ""
 		s.bluecat.tokenLock.Unlock()
 
-		return s.MakeRequest(route, queryParam)
+		return s.MakeRequest(method, route, queryParam)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -163,7 +163,7 @@ func (s *server) MakeRequest(route, queryParam string) ([]byte, error) {
 }
 
 func (s *server) SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
-	body, err := s.MakeRequest("/getSystemInfo", "")
+	body, err := s.MakeRequest("GET", "/getSystemInfo", "")
 	if err != nil {
 		logger.Error("Failed to retrieve system info",
 			zap.Error(err))
@@ -216,7 +216,7 @@ func (s *server) GetRecordHintHandler(w http.ResponseWriter, r *http.Request) {
 	queryParam := fmt.Sprintf("count=%s&options=%s&start=%s", count, options, start)
 
 	// Make the API request
-	body, err := s.MakeRequest(endpoint, queryParam)
+	body, err := s.MakeRequest("GET", endpoint, queryParam)
 	if err != nil {
 		logger.Error("Failed to make API request for record hint",
 			zap.String("endpoint", endpoint),

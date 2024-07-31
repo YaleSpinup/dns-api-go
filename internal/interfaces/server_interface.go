@@ -1,5 +1,5 @@
 package interfaces
 
 type ServerInterface interface {
-	MakeRequest(route, queryParam string) ([]byte, error)
+	MakeRequest(method, route, queryParam string) ([]byte, error)
 }

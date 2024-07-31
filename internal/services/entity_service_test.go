@@ -88,7 +88,7 @@ func TestGetEntityByID(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			mockServer := &mocks.MockServer{
-				MakeRequestFunc: func(route, queryParam string) ([]byte, error) {
+				MakeRequestFunc: func(method, route, queryParam string) ([]byte, error) {
 					return tc.mockMakeRequestResponse, tc.mockMakeRequestError
 				},
 			}
@@ -226,7 +226,7 @@ func TestDeleteEntityByID(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			mockServer := &mocks.MockServer{
-				MakeRequestFunc: func(route, queryParam string) ([]byte, error) {
+				MakeRequestFunc: func(method, route, queryParam string) ([]byte, error) {
 					if strings.Contains(route, "getEntityById") {
 						return tc.mockMakeReqGetEntByIDResp, tc.mockMakeReqGetEntByIDError
 					} else if strings.Contains(route, "delete") {

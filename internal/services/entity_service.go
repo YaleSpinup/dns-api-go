@@ -31,7 +31,7 @@ func (es *GenericEntityService) GetEntityByID(id int, includeHA bool) (*models.E
 
 	// Send http request to bluecat
 	route, params := "/getEntityById", fmt.Sprintf("id=%d&includeHA=%t", id, includeHA)
-	resp, err := es.server.MakeRequest(route, params)
+	resp, err := es.server.MakeRequest("GET", route, params)
 
 	// Check for errors when sending request
 	if err != nil {
@@ -118,7 +118,7 @@ func (es *GenericEntityService) DeleteEntityByID(id int) error {
 
 	// Send http request to bluecat
 	route, params := "/delete", fmt.Sprintf("id=%d", id)
-	_, err = es.server.MakeRequest(route, params)
+	_, err = es.server.MakeRequest("DELETE", route, params)
 
 	// Check for errors while sending request
 	if err != nil {
