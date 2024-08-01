@@ -93,7 +93,7 @@ func TestGetEntityByID(t *testing.T) {
 				},
 			}
 
-			entityService := NewGenericEntityService(mockServer)
+			entityService := NewBaseService(mockServer)
 			entity, err := entityService.GetEntityByID(tc.entityId, tc.includeHA)
 
 			// If json unmarshalling error, check that any error is returned
@@ -237,7 +237,7 @@ func TestDeleteEntityByID(t *testing.T) {
 				},
 			}
 
-			entityService := NewGenericEntityService(mockServer)
+			entityService := NewBaseService(mockServer)
 			err := entityService.DeleteEntityByID(tc.entityId)
 			if tc.expectedError != nil && !common.CompareErrors(tc.expectedError, err) {
 				t.Errorf("%s: expected error %v, got %v", tc.name, tc.expectedError, err)

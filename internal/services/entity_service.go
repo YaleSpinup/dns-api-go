@@ -16,17 +16,30 @@ type EntityResponse struct {
 	Properties *string `json:"properties"`
 }
 
-type GenericEntityService struct {
+type EntityGetter interface {
+	GetEntityByID(id int, includeHA bool) (*models.Entity, error)
+}
+
+type EntityDeleter interface {
+	DeleteEntityByID(id int) error
+}
+
+type BaseEntityService interface {
+	EntityGetter
+	EntityDeleter
+}
+
+type BaseService struct {
 	server interfaces.ServerInterface
 }
 
-// NewGenericEntityService Constructor for GenericEntityService
-func NewGenericEntityService(server interfaces.ServerInterface) *GenericEntityService {
-	return &GenericEntityService{server: server}
+// NewBaseService Constructor for BaseService
+func NewBaseService(server interfaces.ServerInterface) *BaseService {
+	return &BaseService{server: server}
 }
 
 // GetEntityByID Retrieves an entity by ID from bluecat
-func (es *GenericEntityService) GetEntityByID(id int, includeHA bool) (*models.Entity, error) {
+func (es *BaseService) GetEntityByID(id int, includeHA bool) (*models.Entity, error) {
 	logger.Info("GetEntityByID started", zap.Int("id", id), zap.Bool("includeHA", includeHA))
 
 	// Send http request to bluecat
@@ -93,7 +106,7 @@ var ALLOWDELETE = []string{
 }
 
 // DeleteEntityByID Deletes an entity by ID from bluecat
-func (es *GenericEntityService) DeleteEntityByID(id int) error {
+func (es *BaseService) DeleteEntityByID(id int) error {
 	logger.Info("DeleteEntityByID started", zap.Int("id", id))
 
 	// Get the entity type

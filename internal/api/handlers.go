@@ -263,7 +263,7 @@ func (s *server) GetEntityByIdHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Attempt to retrieve the entity by ID and handle potential errors
-	entity, err := s.services.GenericEntityService.GetEntityByID(id, includeHA)
+	entity, err := s.services.BaseService.GetEntityByID(id, includeHA)
 	if err != nil {
 		// Log the error and respond with appropriate HTTP status
 		logger.Error("Error retrieving entity by ID",
@@ -325,7 +325,7 @@ func (s *server) DeleteEntityByIdHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Attempt to delete the entity by ID and handle potential errors
-	err = s.services.GenericEntityService.DeleteEntityByID(id)
+	err = s.services.BaseService.DeleteEntityByID(id)
 	if err != nil {
 		// Log the error and respond with appropriate HTTP status
 		logger.Error("Error deleting entity by ID",

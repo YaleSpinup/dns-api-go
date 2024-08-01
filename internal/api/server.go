@@ -67,7 +67,7 @@ type bluecat struct {
 }
 
 type Services struct {
-	GenericEntityService *services.GenericEntityService
+	BaseService *services.BaseService
 }
 
 type server struct {
@@ -124,7 +124,7 @@ func NewServer(config common.Config) error {
 
 	// Define services that interact with Bluecat entities
 	s.services = Services{
-		GenericEntityService: services.NewGenericEntityService(&s),
+		BaseService: services.NewBaseService(&s),
 	}
 
 	if b := config.ProxyBackend; b != nil {
