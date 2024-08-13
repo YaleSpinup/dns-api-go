@@ -25,6 +25,12 @@ import (
 var testConfig = []byte(
 	`{
 		"listenAddress": ":8000",
+		"bluecat": {
+			"account": "test",
+			"baseUrl": "https://bluecat.example.com",
+			"username": "test",
+			"password": "test"
+		},
 		"account": {
 			"region": "us-east-1",
 			"akid": "key1",
@@ -42,6 +48,12 @@ var brokenConfig = []byte(`{ "foobar": { "baz": "biz" }`)
 func TestReadConfig(t *testing.T) {
 	expectedConfig := Config{
 		ListenAddress: ":8000",
+		Bluecat: &Bluecat{
+			Account:  "test",
+			BaseUrl:  "https://bluecat.example.com",
+			Username: "test",
+			Password: "test",
+		},
 		Account: Account{
 			Region:     "us-east-1",
 			Akid:       "key1",

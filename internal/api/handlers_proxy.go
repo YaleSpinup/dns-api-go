@@ -1,7 +1,8 @@
 package api
 
 import (
-	log "github.com/sirupsen/logrus"
+	"dns-api-go/logger"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"strings"
@@ -15,14 +16,19 @@ const (
 )
 
 func (s *server) ProxyRequestHandler(w http.ResponseWriter, r *http.Request) {
-	log.Debugf("Method: %s, URL: %s, Client IP: %s", r.Method, r.URL, r.RemoteAddr)
+	logger.Debug("ProxyRequestHandler invoked",
+		zap.String("Method", r.Method),
+		zap.String("URL", r.URL.String()),
+		zap.String("Client IP", r.RemoteAddr))
 
 	backendURL := strings.Replace(r.URL.String(), backendPrefix, s.backend.prefix, 1)
-	log.Debugf("Proxying request: %s to %s", r.URL, backendURL)
+	logger.Debug("Proxying request",
+		zap.String("Original URL", r.URL.String()),
+		zap.String("Backend URL", backendURL))
 
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, s.backend.baseUrl+backendURL, r.Body)
 	if err != nil {
-		log.Errorf("Failed to generate backend request for %s: %s", backendURL, err)
+		logger.Error("Failed to generate backend request", zap.String("Backend URL", backendURL), zap.Error(err))
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -33,7 +39,7 @@ func (s *server) ProxyRequestHandler(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{Timeout: backendTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Errorf("Failed to proxy request to backend: %s", err)
+		logger.Error("Failed to proxy request to backend", zap.Error(err))
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		return
 	}

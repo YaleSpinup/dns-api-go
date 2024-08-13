@@ -18,6 +18,7 @@ package api
 
 import (
 	"context"
+	"dns-api-go/internal/services"
 	"encoding/json"
 	"errors"
 	"math/rand"
@@ -26,8 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"dns-api-go/common"
 	"dns-api-go/iam"
+	"dns-api-go/internal/common"
 	"dns-api-go/session"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -57,11 +58,16 @@ type proxyBackend struct {
 }
 
 type bluecat struct {
+	account   string
 	baseUrl   string
 	user      string
 	password  string
 	token     string
 	tokenLock sync.Mutex
+}
+
+type Services struct {
+	BaseService *services.BaseService
 }
 
 type server struct {
@@ -74,6 +80,7 @@ type server struct {
 	bluecat      *bluecat
 	orgPolicy    string
 	org          string
+	services     Services
 }
 
 // NewServer creates a new server and starts it
@@ -108,10 +115,16 @@ func NewServer(config common.Config) error {
 	if b := config.Bluecat; b != nil {
 		log.Debugf("configuring bluecat %s", b.BaseUrl)
 		s.bluecat = &bluecat{
+			account:  b.Account,
 			baseUrl:  b.BaseUrl,
 			user:     b.Username,
 			password: b.Password,
 		}
+	}
+
+	// Define services that interact with Bluecat entities
+	s.services = Services{
+		BaseService: services.NewBaseService(&s),
 	}
 
 	if b := config.ProxyBackend; b != nil {

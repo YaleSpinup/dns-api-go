@@ -21,15 +21,16 @@ import (
 	"encoding/base64"
 	"flag"
 	"fmt"
+	"go.uber.org/zap"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 
-	"dns-api-go/api"
-	"dns-api-go/common"
+	"dns-api-go/internal/api"
+	"dns-api-go/internal/common"
 
-	log "github.com/sirupsen/logrus"
+	"dns-api-go/logger"
 )
 
 var (
@@ -52,16 +53,27 @@ func main() {
 		vers()
 	}
 
+	logger.InitializeDefault()
+
 	cwd, err := os.Getwd()
 	if err != nil {
-		log.Fatal("unable to get working directory")
+		logger.Fatal("unable to get working directory")
 	}
-	log.Infof("Starting dns-api-go version %s (%s)", Version, cwd)
+	logger.Info("Starting dns-api-go", zap.String("version", Version), zap.String("cwd", cwd))
 
 	config, err := common.ReadConfig(configReader())
 	if err != nil {
-		log.Fatalf("Unable to read configuration from: %+v", err)
+		logger.Fatal("Unable to read configuration from:", zap.Error(err))
 	}
+
+	// set APP_ENV variable based on org in config.go
+	var appEnv string
+	if config.Org == "dev" {
+		appEnv = "dev"
+	} else {
+		appEnv = "prod"
+	}
+	os.Setenv("APP_ENV", appEnv)
 
 	config.Version = common.Version{
 		Version:    Version,
@@ -69,52 +81,46 @@ func main() {
 		GitHash:    Githash,
 	}
 
-	// Set the loglevel, info if it's unset
-	switch config.LogLevel {
-	case "error":
-		log.SetLevel(log.ErrorLevel)
-	case "warn":
-		log.SetLevel(log.WarnLevel)
-	case "debug":
-		log.SetLevel(log.DebugLevel)
-	default:
-		log.SetLevel(log.InfoLevel)
-	}
+	// Sync the default logger before switching to a new configuration
+	logger.Sync()
+	// Initialize new logger based on environment and log level
+	logger.SetLogLevel(appEnv, config.LogLevel)
+	defer logger.Sync()
 
 	if config.LogLevel == "debug" {
-		log.Debug("Starting profiler on 127.0.0.1:6080")
+		logger.Debug("Starting profiler on 127.0.0.1:6080")
 		go http.ListenAndServe("127.0.0.1:6080", nil)
 	}
-	log.Debugf("loaded configuration: %+v", config)
+	logger.Debug("loaded configuration", zap.Any("config", config))
 
 	if err := api.NewServer(config); err != nil {
-		log.Fatal(err)
+		logger.Fatal("Server initialization failed", zap.Error(err))
 	}
 }
 
 func configReader() io.Reader {
 	if configEnv := os.Getenv("API_CONFIG"); configEnv != "" {
-		log.Infof("reading configuration from API_CONFIG environment")
+		logger.Info("reading configuration from API_CONFIG environment")
 
 		c, err := base64.StdEncoding.DecodeString(configEnv)
 		if err != nil {
-			log.Infof("API_CONFIG is not base64 encoded")
+			logger.Info("API_CONFIG is not base64 encoded")
 			c = []byte(configEnv)
 		}
 
 		return bytes.NewReader(c)
 	}
 
-	log.Infof("reading configuration from %s", *configFileName)
+	logger.Info("reading configuration", zap.String("file", *configFileName))
 
 	configFile, err := os.Open(*configFileName)
 	if err != nil {
-		log.Fatalln("unable to open config file", err)
+		logger.Fatal("unable to open config file", zap.Error(err))
 	}
 
 	c, err := ioutil.ReadAll(configFile)
 	if err != nil {
-		log.Fatalln("unable to read config file", err)
+		logger.Fatal("unable to read config file", zap.Error(err))
 	}
 
 	return bytes.NewReader(c)

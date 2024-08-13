@@ -43,6 +43,7 @@ type ProxyBackend struct {
 }
 
 type Bluecat struct {
+	Account  string
 	BaseUrl  string
 	Username string
 	Password string

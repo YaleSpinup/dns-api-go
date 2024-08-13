@@ -18,6 +18,7 @@ package api
 
 import (
 	"fmt"
+	"github.com/gorilla/mux"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -105,5 +106,64 @@ func TestTokenMiddleware(t *testing.T) {
 		if h, ok := resp.Header[k]; !ok || h[0] != v {
 			t.Errorf("Expected response header %s from OPTIONS request to be %s, got %s", k, v, h[0])
 		}
+	}
+}
+
+func TestAccountValidationMiddleware(t *testing.T) {
+	// Mock server setup
+	mockServer := server{
+		bluecat: &bluecat{
+			account: "validAccount",
+		},
+	}
+
+	// Mock next handler
+	mockNextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Define tests
+	tests := []struct {
+		name           string
+		account        string
+		expectedStatus int
+	}{
+		{
+			name:           "Valid account",
+			account:        "validAccount",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Invalid account",
+			account:        "invalidAccount",
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	// Run tests
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Crate new request
+			req, err := http.NewRequest("GET", "/"+tc.account+"/someEndpoint", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Create a ResponseRecorder to record the response
+			rr := httptest.NewRecorder()
+
+			// Create a new router and apply the middleware
+			router := mux.NewRouter()
+			router.Use(mockServer.AccountValidationMiddleware)
+			router.HandleFunc("/{account}/someEndpoint", mockNextHandler)
+
+			// Server the request
+			router.ServeHTTP(rr, req)
+
+			// Check the status code
+			if status := rr.Code; status != tc.expectedStatus {
+				t.Errorf("handler returned wrong status code: got %v want %v", status, tc.expectedStatus)
+			}
+		})
 	}
 }
