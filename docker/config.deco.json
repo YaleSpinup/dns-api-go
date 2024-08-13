@@ -6,6 +6,7 @@
     "token": "{{ .proxy_backend_token }}"
   },
   "bluecat": {
+    "account": "{{ .bluecat_account }}",
     "baseUrl": "{{ .bluecat_api_baseUrl }}",
     "username": "{{ .bluecat_api_username }}",
     "password": "{{ .bluecat_api_password }}"
