@@ -4,33 +4,33 @@ import (
 	"dns-api-go/internal/services"
 	"dns-api-go/logger"
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	"net/http"
 	"strconv"
 )
 
-// GetEntityByIdHandler handles GET requests for retrieving an entity by ID.
-func (s *server) GetEntityByIdHandler(w http.ResponseWriter, r *http.Request) {
+// EntityParams represents the parameters for entity handlers.
+type EntityParams struct {
+	ID        int
+	IncludeHA bool
+}
+
+// parseEntityParams parses and validates the parameters from the request.
+func parseEntityParams(r *http.Request) (*EntityParams, error) {
 	// Extract entity ID parameter from the request URL
 	vars := mux.Vars(r)
 	idStr, idOk := vars["id"]
 
 	// Validate the presence of the required 'id' parameter
 	if !idOk {
-		logger.Warn("Missing required parameter: id",
-			zap.String("method", r.Method))
-		http.Error(w, "Missing required parameter: id", http.StatusBadRequest)
-		return
+		return nil, fmt.Errorf("missing required parameter: id")
 	}
 	// Convert id from string to int
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		logger.Error("Invalid ID format",
-			zap.String("id", idStr),
-			zap.Error(err))
-		http.Error(w, "Invalid ID format", http.StatusBadRequest)
-		return
+		return nil, fmt.Errorf("invalid ID format")
 	}
 
 	// Default includeHA to "true" if not specified
@@ -40,13 +40,29 @@ func (s *server) GetEntityByIdHandler(w http.ResponseWriter, r *http.Request) {
 		includeHA = true
 	}
 
+	return &EntityParams{
+		ID:        id,
+		IncludeHA: includeHA,
+	}, nil
+}
+
+// GetEntityByIdHandler handles GET requests for retrieving an entity by ID.
+func (s *server) GetEntityByIdHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse the entity parameters from the request
+	params, err := parseEntityParams(r)
+	if err != nil {
+		logger.Warn("Invalid request parameters", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	// Attempt to retrieve the entity by ID and handle potential errors
-	entity, err := s.services.BaseService.GetEntityByID(id, includeHA)
+	entity, err := s.services.BaseService.GetEntityByID(params.ID, params.IncludeHA)
 	if err != nil {
 		// Log the error and respond with appropriate HTTP status
 		logger.Error("Error retrieving entity by ID",
-			zap.Int("id", id),
-			zap.Bool("includeHA", includeHA),
+			zap.Int("id", params.ID),
+			zap.Bool("includeHA", params.IncludeHA),
 			zap.String("method", r.Method),
 			zap.Error(err))
 
@@ -81,33 +97,20 @@ func (s *server) GetEntityByIdHandler(w http.ResponseWriter, r *http.Request) {
 
 // DeleteEntityByIdHandler handles DELETE requests for deleting an entity by ID.
 func (s *server) DeleteEntityByIdHandler(w http.ResponseWriter, r *http.Request) {
-	// Extract entity ID parameter from the request URL
-	vars := mux.Vars(r)
-	idStr, idOk := vars["id"]
-
-	// Validate the presence of the required 'id' parameter
-	if !idOk {
-		logger.Warn("Missing required parameter: id",
-			zap.String("method", r.Method))
-		http.Error(w, "Missing required parameter: id", http.StatusBadRequest)
-		return
-	}
-	// Convert id from string to int
-	id, err := strconv.Atoi(idStr)
+	// Parse the entity parameters from the request
+	params, err := parseEntityParams(r)
 	if err != nil {
-		logger.Error("Invalid ID format",
-			zap.String("id", idStr),
-			zap.Error(err))
-		http.Error(w, "Invalid ID format", http.StatusBadRequest)
+		logger.Warn("Invalid request parameters", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Attempt to delete the entity by ID and handle potential errors
-	err = s.services.BaseService.DeleteEntityByID(id)
+	err = s.services.BaseService.DeleteEntityByID(params.ID)
 	if err != nil {
 		// Log the error and respond with appropriate HTTP status
 		logger.Error("Error deleting entity by ID",
-			zap.Int("id", id),
+			zap.Int("id", params.ID),
 			zap.String("method", r.Method),
 			zap.Error(err))
 
