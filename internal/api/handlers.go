@@ -18,18 +18,17 @@ package api
 
 import (
 	"crypto/tls"
+	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
+	"github.com/YaleSpinup/apierror"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
-
-	"dns-api-go/logger"
-	"github.com/YaleSpinup/apierror"
-	"github.com/pkg/errors"
 )
 
 // PingHandler responds to ping requests
@@ -39,6 +38,50 @@ func (s *server) PingHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("pong"))
+}
+
+// VersionHandler responds to version requests
+func (s *server) VersionHandler(w http.ResponseWriter, r *http.Request) {
+	w = LogWriter{w}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	data, err := json.Marshal(s.version)
+	if err != nil {
+		logger.Error("Failed to marshal version data", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte{})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
+}
+
+func (s *server) SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
+	body, err := s.MakeRequest("GET", "/getSystemInfo", "")
+	if err != nil {
+		logger.Error("Failed to retrieve system info",
+			zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Parse the response body into a map
+	info := make(map[string]string)
+	pairs := strings.Split(string(body), "|")
+	for _, pair := range pairs {
+		kv := strings.Split(pair, "=")
+		if len(kv) == 2 {
+			info[kv[0]] = kv[1]
+		}
+	}
+
+	// Set the Content-Type header to application/json
+	w.Header().Set("Content-Type", "application/json")
+
+	// Encode the map as JSON and write it to the response
+	json.NewEncoder(w).Encode(info)
 }
 
 func (s *server) generateAuthToken(username, password string) (string, error) {
@@ -159,32 +202,6 @@ func (s *server) MakeRequest(method, route, queryParam string) ([]byte, error) {
 	return body, nil
 }
 
-func (s *server) SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
-	body, err := s.MakeRequest("GET", "/getSystemInfo", "")
-	if err != nil {
-		logger.Error("Failed to retrieve system info",
-			zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Parse the response body into a map
-	info := make(map[string]string)
-	pairs := strings.Split(string(body), "|")
-	for _, pair := range pairs {
-		kv := strings.Split(pair, "=")
-		if len(kv) == 2 {
-			info[kv[0]] = kv[1]
-		}
-	}
-
-	// Set the Content-Type header to application/json
-	w.Header().Set("Content-Type", "application/json")
-
-	// Encode the map as JSON and write it to the response
-	json.NewEncoder(w).Encode(info)
-}
-
 func (s *server) GetRecordHintHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
 	count := r.URL.Query().Get("count")
@@ -227,24 +244,6 @@ func (s *server) GetRecordHintHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Write the response body as-is
 	w.Write(body)
-}
-
-// VersionHandler responds to version requests
-func (s *server) VersionHandler(w http.ResponseWriter, r *http.Request) {
-	w = LogWriter{w}
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-
-	data, err := json.Marshal(s.version)
-	if err != nil {
-		logger.Error("Failed to marshal version data", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte{})
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Write(data)
 }
 
 // handleError handles standard apierror return codes
