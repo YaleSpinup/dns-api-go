@@ -31,13 +31,6 @@ var testConfig = []byte(
 			"username": "test",
 			"password": "test"
 		},
-		"account": {
-			"region": "us-east-1",
-			"akid": "key1",
-			"secret": "secret1",
-			"role": "uber-role",
-			"externalId": "foobar"
-		},
 		"token": "SEKRET",
 		"logLevel": "info",
 		"org": "test"
@@ -53,13 +46,6 @@ func TestReadConfig(t *testing.T) {
 			BaseUrl:  "https://bluecat.example.com",
 			Username: "test",
 			Password: "test",
-		},
-		Account: Account{
-			Region:     "us-east-1",
-			Akid:       "key1",
-			Secret:     "secret1",
-			Role:       "uber-role",
-			ExternalID: "foobar",
 		},
 		Token:    "SEKRET",
 		LogLevel: "info",
