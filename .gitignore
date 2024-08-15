@@ -5,6 +5,7 @@ vendor
 .vscode
 .idea
 debug
+.go-version
 
 
 # Fresh build files
