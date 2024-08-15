@@ -22,7 +22,7 @@ func TestParseEntityParams(t *testing.T) {
 	}{
 		{
 			name: "Valid ID and includeHA",
-			url:  "/entity/1",
+			url:  "/id/1",
 			queryParams: url.Values{
 				"includeHA": []string{"false"},
 			},
@@ -34,7 +34,7 @@ func TestParseEntityParams(t *testing.T) {
 		},
 		{
 			name:        "Valid ID without includeHA",
-			url:         "/entity/1",
+			url:         "/id/1",
 			queryParams: url.Values{},
 			expectedParams: &EntityParams{
 				ID:        1,
@@ -44,21 +44,21 @@ func TestParseEntityParams(t *testing.T) {
 		},
 		{
 			name:           "Missing ID parameter",
-			url:            "/entity",
+			url:            "/id",
 			queryParams:    url.Values{},
 			expectedParams: nil,
 			expectedError:  "missing required parameter: id",
 		},
 		{
 			name:           "Invalid ID format",
-			url:            "/entity/invalid",
+			url:            "/id/invalid",
 			queryParams:    url.Values{},
 			expectedParams: nil,
 			expectedError:  "invalid ID format",
 		},
 		{
 			name: "Invalid includeHA format",
-			url:  "/entity/1",
+			url:  "/id/1",
 			queryParams: url.Values{
 				"includeHA": []string{"invalid"},
 			},
@@ -77,7 +77,7 @@ func TestParseEntityParams(t *testing.T) {
 
 			// Create a new router and register the route
 			router := mux.NewRouter()
-			router.HandleFunc("/entity/{id}", func(w http.ResponseWriter, r *http.Request) {
+			router.HandleFunc("/id/{id}", func(w http.ResponseWriter, r *http.Request) {
 				params, err := parseEntityParams(r)
 				if tc.expectedError != "" {
 					assert.Nil(t, params)
