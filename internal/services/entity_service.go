@@ -24,9 +24,14 @@ type EntityDeleter interface {
 	DeleteEntityByID(id int) error
 }
 
+type EntitiesLister interface {
+	GetEntities(start int, count int, parentId int, entityType string, includeHA bool) (*[]models.Entity, error)
+}
+
 type BaseEntityService interface {
 	EntityGetter
 	EntityDeleter
+	EntitiesLister
 }
 
 type BaseService struct {
@@ -55,11 +60,11 @@ func (es *BaseService) GetEntityByID(id int, includeHA bool) (*models.Entity, er
 	// Unmarshal the response
 	var entityResp EntityResponse
 	if err := json.Unmarshal(resp, &entityResp); err != nil {
-		logger.Error("Error unmarshaling entity response", zap.Error(err))
+		logger.Error("Error unmarshalling entity response", zap.Error(err))
 		return nil, err
 	}
 	// Check if the response represents an empty entity
-	if entityResp.ID == 0 && entityResp.Name == nil && entityResp.Type == nil && entityResp.Properties == nil {
+	if entityResp.isEmpty() {
 		logger.Info("Entity not found", zap.Int("id", id))
 		return nil, &ErrEntityNotFound{}
 	}
@@ -94,6 +99,11 @@ func (er *EntityResponse) ToEntity() *models.Entity {
 	}
 
 	return entity
+}
+
+// isEmpty Checks if an EntityResponse is empty
+func (er *EntityResponse) isEmpty() bool {
+	return er.ID == 0 && er.Name == nil && er.Type == nil && er.Properties == nil
 }
 
 var ALLOWDELETE = []string{
@@ -140,4 +150,40 @@ func (es *BaseService) DeleteEntityByID(id int) error {
 
 	logger.Info("DeleteEntityByID successful", zap.Int("id", id))
 	return nil
+}
+
+func (es *BaseService) GetEntities(start int, count int, parentId int, entityType string, includeHA bool) (*[]models.Entity, error) {
+	logger.Info("GetEntities started",
+		zap.Int("start", start),
+		zap.Int("count", count),
+		zap.Int("parentId", parentId),
+		zap.String("entityType", entityType),
+		zap.Bool("includeHA", includeHA))
+
+	// Send http request to bluecat
+	route := "/getEntities"
+	params := fmt.Sprintf("start=%d&count=%d&parentId=%d&entityType=%s&includeHA=%t",
+		start, count, parentId, entityType, includeHA)
+	resp, err := es.server.MakeRequest("GET", route, params)
+
+	// Check for errors when sending request
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the response
+	var entitiesResp []EntityResponse
+	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
+		logger.Error("Error unmarshalling entities response", zap.Error(err))
+		return nil, err
+	}
+
+	// For each entity response, convert it to an entity
+	entities := make([]models.Entity, len(entitiesResp))
+	for i, entityResp := range entitiesResp {
+		entities[i] = *entityResp.ToEntity()
+	}
+
+	logger.Info("GetEntities successful", zap.Int("count", len(entities)))
+	return &entities, nil
 }
