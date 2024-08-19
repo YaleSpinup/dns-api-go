@@ -165,6 +165,78 @@ func TestToEntity(t *testing.T) {
 	}
 }
 
+func TestIsEmpty(t *testing.T) {
+	tests := []struct {
+		name         string
+		er           EntityResponse
+		expectedResp bool
+	}{
+		{
+			name:         "Completely empty EntityResponse",
+			er:           EntityResponse{},
+			expectedResp: true,
+		},
+		{
+			name: "EntityResponse with all fields explicitly set to zero/nil",
+			er: EntityResponse{
+				ID:         0,
+				Name:       nil,
+				Type:       nil,
+				Properties: nil,
+			},
+			expectedResp: true,
+		},
+		{
+			name:         "EntityResponse with only ID set",
+			er:           EntityResponse{ID: 1},
+			expectedResp: false,
+		},
+		{
+			name:         "EntityResponse with only Name set",
+			er:           EntityResponse{Name: common.StringPtr("Test")},
+			expectedResp: false,
+		},
+		{
+			name:         "EntityResponse with only Type set",
+			er:           EntityResponse{Type: common.StringPtr("TestType")},
+			expectedResp: false,
+		},
+		{
+			name:         "EntityResponse with only Properties set",
+			er:           EntityResponse{Properties: common.StringPtr("Test properties")},
+			expectedResp: false,
+		},
+		{
+			name: "EntityResponse with all fields set",
+			er: EntityResponse{
+				ID:         1,
+				Name:       common.StringPtr("Test"),
+				Type:       common.StringPtr("TestType"),
+				Properties: common.StringPtr("Test properties"),
+			},
+			expectedResp: false,
+		},
+		{
+			name: "EntityResponse with zero ID and other fields set",
+			er: EntityResponse{
+				ID:         0,
+				Name:       common.StringPtr("Test"),
+				Type:       common.StringPtr("TestType"),
+				Properties: common.StringPtr("Test properties"),
+			},
+			expectedResp: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if res := tc.er.isEmpty(); res != tc.expectedResp {
+				t.Errorf("isEmpty() = %v, expectedResp %v", res, tc.expectedResp)
+			}
+		})
+	}
+}
+
 func TestDeleteEntityByID(t *testing.T) {
 	tests := []struct {
 		name                       string
