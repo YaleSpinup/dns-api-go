@@ -319,3 +319,124 @@ func TestDeleteEntityByID(t *testing.T) {
 		})
 	}
 }
+
+func TestGetEntities(t *testing.T) {
+	tests := []struct {
+		name                    string
+		start                   int
+		count                   int
+		parentId                int
+		entityType              string
+		includeHA               bool
+		mockMakeRequestResponse []byte
+		mockMakeRequestError    error
+		expectedResponse        *[]models.Entity
+		expectedError           error
+	}{
+		{
+			name:       "Successful retrieval",
+			start:      0,
+			count:      2,
+			parentId:   1,
+			entityType: "HostRecord",
+			includeHA:  true,
+			mockMakeRequestResponse: []byte(`[
+                {
+                    "id": 1,
+                    "name": "Entity1",
+                    "type": "HostRecord",
+                    "properties": "Properties1"
+                },
+                {
+                    "id": 2,
+                    "name": "Entity2",
+                    "type": "HostRecord",
+                    "properties": "Properties2"
+                }
+            ]`),
+			mockMakeRequestError: nil,
+			expectedResponse: &[]models.Entity{
+				{
+					ID:         1,
+					Name:       "Entity1",
+					Type:       "HostRecord",
+					Properties: "Properties1",
+				},
+				{
+					ID:         2,
+					Name:       "Entity2",
+					Type:       "HostRecord",
+					Properties: "Properties2",
+				},
+			},
+			expectedError: nil,
+		},
+		{
+			name:                    "Empty result",
+			start:                   0,
+			count:                   10,
+			parentId:                999,
+			entityType:              "HostRecord",
+			includeHA:               false,
+			mockMakeRequestResponse: []byte(`[]`),
+			mockMakeRequestError:    nil,
+			expectedResponse:        &[]models.Entity{},
+			expectedError:           nil,
+		},
+		{
+			name:                    "JSON unmarshal error",
+			start:                   0,
+			count:                   10,
+			parentId:                1,
+			entityType:              "HostRecord",
+			includeHA:               true,
+			mockMakeRequestResponse: []byte("{invalidJson}"),
+			mockMakeRequestError:    nil,
+			expectedResponse:        nil,
+			expectedError:           errors.New("Simulating unmarshal error"),
+		},
+		{
+			name:                    "MakeRequest Error",
+			start:                   -1,
+			count:                   10,
+			parentId:                1,
+			entityType:              "InvalidType",
+			includeHA:               true,
+			mockMakeRequestResponse: nil,
+			mockMakeRequestError:    errors.New("Simulating MakeRequest error"),
+			expectedResponse:        nil,
+			expectedError:           errors.New("Simulating MakeRequest error"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockServer := &mocks.MockServer{
+				MakeRequestFunc: func(method, route, queryParam string) ([]byte, error) {
+					return tc.mockMakeRequestResponse, tc.mockMakeRequestError
+				},
+			}
+
+			entityService := NewBaseService(mockServer)
+			entities, err := entityService.GetEntities(tc.start, tc.count, tc.parentId, tc.entityType, tc.includeHA)
+
+			// If json unmarshalling error, check that any error is returned
+			if tc.expectedError != nil && tc.expectedError.Error() == "Simulating unmarshal error" {
+				if err == nil {
+					t.Errorf("%s: expected an unmarshal error, got nil", tc.name)
+				}
+				// For other errors, check if returned error matches expected error
+			} else if tc.expectedError != nil && !common.CompareErrors(tc.expectedError, err) {
+				t.Errorf("%s: expected error %v, got %v", tc.name, tc.expectedError, err)
+				// No error expected
+			} else if tc.expectedError == nil && err != nil {
+				t.Errorf("%s: expected no error, got %v", tc.name, err)
+			}
+
+			// Check the response
+			if !reflect.DeepEqual(entities, tc.expectedResponse) {
+				t.Errorf("%s: expected response %+v, got %+v", tc.name, tc.expectedResponse, entities)
+			}
+		})
+	}
+}
