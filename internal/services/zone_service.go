@@ -12,16 +12,18 @@ import (
 
 type ZoneEntityService interface {
 	GetZones(start int, count int, options map[string]string) (*[]models.Entity, error)
+	GetZone(zoneId int, includeHA bool) (*models.Entity, error)
 }
 
 type ZoneService struct {
 	server interfaces.ServerInterface
 	EntitiesLister
+	EntityGetter
 }
 
 // NewZoneService Constructor for ZoneService
-func NewZoneService(server interfaces.ServerInterface, entitiesLister EntitiesLister) *ZoneService {
-	return &ZoneService{server: server, EntitiesLister: entitiesLister}
+func NewZoneService(server interfaces.ServerInterface, entitiesLister EntitiesLister, entityGetter EntityGetter) *ZoneService {
+	return &ZoneService{server: server, EntitiesLister: entitiesLister, EntityGetter: entityGetter}
 }
 
 // GetZones Retrieves zones from bluecat
@@ -70,4 +72,19 @@ func (zs *ZoneService) GetZones(start int, count int, options map[string]string)
 
 	logger.Info("GetZones successful", zap.Int("count", len(zones)))
 	return &zones, nil
+}
+
+func (zs *ZoneService) GetZone(zoneId int, includeHA bool) (*models.Entity, error) {
+	logger.Info("GetZone started", zap.Int("zoneId", zoneId))
+
+	// Call EntityGetter
+	entity, err := zs.EntityGetter.GetEntityByID(zoneId, includeHA)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Info("GetZone successful",
+		zap.Int("entityId", entity.ID),
+		zap.String("entityType", entity.Type))
+	return entity, nil
 }
