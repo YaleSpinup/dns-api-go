@@ -10,11 +10,11 @@ import (
 )
 
 type EntityGetter interface {
-	GetEntityByID(id int, includeHA bool) (*models.Entity, error)
+	GetEntity(id int, includeHA bool) (*models.Entity, error)
 }
 
 type EntityDeleter interface {
-	DeleteEntityByID(id int) error
+	DeleteEntity(id int) error
 }
 
 type EntitiesLister interface {
@@ -36,8 +36,8 @@ func NewBaseService(server interfaces.ServerInterface) *BaseService {
 	return &BaseService{server: server}
 }
 
-// GetEntityByID Retrieves an entity by ID from bluecat
-func (es *BaseService) GetEntityByID(id int, includeHA bool) (*models.Entity, error) {
+// GetEntity Retrieves an entity by ID from bluecat
+func (es *BaseService) GetEntity(id int, includeHA bool) (*models.Entity, error) {
 	logger.Info("GetEntityByID started", zap.Int("id", id), zap.Bool("includeHA", includeHA))
 
 	// Send http request to bluecat
@@ -80,12 +80,12 @@ var ALLOWDELETE = []string{
 	"MACPool",
 }
 
-// DeleteEntityByID Deletes an entity by ID from bluecat
-func (es *BaseService) DeleteEntityByID(id int) error {
+// DeleteEntity Deletes an entity by ID from bluecat
+func (es *BaseService) DeleteEntity(id int) error {
 	logger.Info("DeleteEntityByID started", zap.Int("id", id))
 
 	// Get the entity type
-	entity, err := es.GetEntityByID(id, false)
+	entity, err := es.GetEntity(id, false)
 	if err != nil {
 		return err
 	}

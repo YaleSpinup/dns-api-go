@@ -6,22 +6,22 @@ import (
 )
 
 type MockBaseService struct {
-	GetEntityByIDFunc    func(id int, includeHA bool) (*models.Entity, error)
-	DeleteEntityByIDFunc func(id int) error
-	GetEntitiesFunc      func(start int, count int, parentId int, entityType string, includeHA bool) (*[]models.Entity, error)
+	GetEntityFunc    func(id int, includeHA bool) (*models.Entity, error)
+	DeleteEntityFunc func(id int) error
+	GetEntitiesFunc  func(start int, count int, parentId int, entityType string, includeHA bool) (*[]models.Entity, error)
 }
 
-func (m *MockBaseService) GetEntityByID(id int, includeHA bool) (*models.Entity, error) {
-	if m.GetEntityByIDFunc != nil {
-		return m.GetEntityByIDFunc(id, includeHA)
+func (m *MockBaseService) GetEntity(id int, includeHA bool) (*models.Entity, error) {
+	if m.GetEntityFunc != nil {
+		return m.GetEntityFunc(id, includeHA)
 	}
 
 	return nil, errors.New("GetEntityByID not mocked")
 }
 
-func (m *MockBaseService) DeleteEntityByID(id int) error {
-	if m.DeleteEntityByIDFunc != nil {
-		return m.DeleteEntityByIDFunc(id)
+func (m *MockBaseService) DeleteEntity(id int) error {
+	if m.DeleteEntityFunc != nil {
+		return m.DeleteEntityFunc(id)
 	}
 
 	return errors.New("DeleteEntityByID not mocked")

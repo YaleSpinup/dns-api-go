@@ -94,7 +94,7 @@ func TestGetEntityByID(t *testing.T) {
 			}
 
 			entityService := NewBaseService(mockServer)
-			entity, err := entityService.GetEntityByID(tc.entityId, tc.includeHA)
+			entity, err := entityService.GetEntity(tc.entityId, tc.includeHA)
 
 			// If json unmarshalling error, check that any error is returned
 			if tc.expectedError != nil && tc.expectedError.Error() == "Simulating unmarshal error" {
@@ -190,7 +190,7 @@ func TestDeleteEntityByID(t *testing.T) {
 			}
 
 			entityService := NewBaseService(mockServer)
-			err := entityService.DeleteEntityByID(tc.entityId)
+			err := entityService.DeleteEntity(tc.entityId)
 			if tc.expectedError != nil && !common.CompareErrors(tc.expectedError, err) {
 				t.Errorf("%s: expected error %v, got %v", tc.name, tc.expectedError, err)
 			} else if tc.expectedError == nil && err != nil {
