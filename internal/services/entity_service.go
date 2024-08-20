@@ -9,13 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type EntityResponse struct {
-	ID         int     `json:"id"`
-	Name       *string `json:"name"`
-	Type       *string `json:"type"`
-	Properties *string `json:"properties"`
-}
-
 type EntityGetter interface {
 	GetEntityByID(id int, includeHA bool) (*models.Entity, error)
 }
@@ -58,13 +51,13 @@ func (es *BaseService) GetEntityByID(id int, includeHA bool) (*models.Entity, er
 	logger.Info("Received response for GetEntityByID", zap.ByteString("response", resp))
 
 	// Unmarshal the response
-	var entityResp EntityResponse
+	var entityResp models.EntityResponse
 	if err := json.Unmarshal(resp, &entityResp); err != nil {
 		logger.Error("Error unmarshalling entity response", zap.Error(err))
 		return nil, err
 	}
 	// Check if the response represents an empty entity
-	if entityResp.isEmpty() {
+	if entityResp.IsEmpty() {
 		logger.Info("Entity not found", zap.Int("id", id))
 		return nil, &ErrEntityNotFound{}
 	}
@@ -75,35 +68,7 @@ func (es *BaseService) GetEntityByID(id int, includeHA bool) (*models.Entity, er
 	logger.Info("GetEntityByID successful",
 		zap.Int("entityID", entity.ID),
 		zap.String("entityType", entity.Type))
-	return entity, nil
-}
-
-// ToEntity Converts EntityResponse to Entity
-func (er *EntityResponse) ToEntity() *models.Entity {
-	// Handle nil pointer dereference if name or properties is null
-	// Type is guaranteed to be non-nil unless entity does not exist, in which case it is handled earlier
-	var name, properties string
-	if er.Name != nil {
-		name = *er.Name
-	}
-	if er.Properties != nil {
-		properties = *er.Properties
-	}
-
-	// Convert EntityResponse to Entity
-	entity := &models.Entity{
-		ID:         er.ID,
-		Name:       name,
-		Type:       *er.Type,
-		Properties: properties,
-	}
-
-	return entity
-}
-
-// isEmpty Checks if an EntityResponse is empty
-func (er *EntityResponse) isEmpty() bool {
-	return er.ID == 0 && er.Name == nil && er.Type == nil && er.Properties == nil
+	return &entity, nil
 }
 
 var ALLOWDELETE = []string{
@@ -172,17 +137,14 @@ func (es *BaseService) GetEntities(start int, count int, parentId int, entityTyp
 	}
 
 	// Unmarshal the response
-	var entitiesResp []EntityResponse
+	var entitiesResp []models.EntityResponse
 	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
 		logger.Error("Error unmarshalling entities response", zap.Error(err))
 		return nil, err
 	}
 
 	// For each entity response, convert it to an entity
-	entities := make([]models.Entity, len(entitiesResp))
-	for i, entityResp := range entitiesResp {
-		entities[i] = *entityResp.ToEntity()
-	}
+	entities := models.ConvertToEntities(entitiesResp)
 
 	logger.Info("GetEntities successful", zap.Int("count", len(entities)))
 	return &entities, nil
