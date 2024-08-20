@@ -78,7 +78,7 @@ func (zs *ZoneService) GetZone(zoneId int, includeHA bool) (*models.Entity, erro
 	logger.Info("GetZone started", zap.Int("zoneId", zoneId))
 
 	// Call EntityGetter
-	entity, err := zs.EntityGetter.GetEntityByID(zoneId, includeHA)
+	entity, err := zs.EntityGetter.GetEntity(zoneId, includeHA)
 	if err != nil {
 		return nil, err
 	}
