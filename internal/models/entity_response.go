@@ -8,7 +8,7 @@ type EntityResponse struct {
 }
 
 // ToEntity Converts EntityResponse to Entity
-func (er *EntityResponse) ToEntity() *Entity {
+func (er *EntityResponse) ToEntity() Entity {
 	// Handle nil pointer dereference if name or properties is null
 	// Type is guaranteed to be non-nil unless entity does not exist, in which case it is handled earlier
 	var name, properties string
@@ -27,14 +27,14 @@ func (er *EntityResponse) ToEntity() *Entity {
 		Properties: properties,
 	}
 
-	return &entity
+	return entity
 }
 
 // ConvertToEntities Converts a slice of EntityResponses to a slice of Entities
 func ConvertToEntities(entityResponses []EntityResponse) []Entity {
 	entities := make([]Entity, len(entityResponses))
 	for i, entityResp := range entityResponses {
-		entities[i] = *entityResp.ToEntity()
+		entities[i] = entityResp.ToEntity()
 	}
 
 	return entities

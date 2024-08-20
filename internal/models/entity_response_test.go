@@ -10,7 +10,7 @@ func TestToEntity(t *testing.T) {
 	tests := []struct {
 		name           string
 		entityResponse EntityResponse
-		expectedEntity *Entity
+		expectedEntity Entity
 	}{
 		{
 			name: "All fields present",
@@ -20,7 +20,7 @@ func TestToEntity(t *testing.T) {
 				Type:       common.StringPtr("HostRecord"),
 				Properties: common.StringPtr("Test Properties"),
 			},
-			expectedEntity: &Entity{
+			expectedEntity: Entity{
 				ID:         1,
 				Name:       "Test Entity",
 				Type:       "HostRecord",
@@ -35,7 +35,7 @@ func TestToEntity(t *testing.T) {
 				Type:       common.StringPtr("HostRecord"),
 				Properties: nil,
 			},
-			expectedEntity: &Entity{
+			expectedEntity: Entity{
 				ID:         1,
 				Name:       "",
 				Type:       "HostRecord",
