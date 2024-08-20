@@ -107,8 +107,9 @@ func NewServer(config common.Config) error {
 	}
 
 	// Define services that interact with Bluecat entities
+	baseService := services.NewBaseService(&s)
 	s.services = Services{
-		BaseService: services.NewBaseService(&s),
+		BaseService: baseService,
 	}
 
 	if b := config.ProxyBackend; b != nil {
