@@ -3,6 +3,7 @@ package services
 import (
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
+	"dns-api-go/internal/types"
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
@@ -38,7 +39,7 @@ func NewBaseService(server interfaces.ServerInterface) *BaseService {
 
 // GetEntity Retrieves an entity by ID from bluecat
 func (es *BaseService) GetEntity(id int, includeHA bool) (*models.Entity, error) {
-	logger.Info("GetEntityByID started", zap.Int("id", id), zap.Bool("includeHA", includeHA))
+	logger.Info("GetEntity started", zap.Int("id", id), zap.Bool("includeHA", includeHA))
 
 	// Send http request to bluecat
 	route, params := "/getEntityById", fmt.Sprintf("id=%d&includeHA=%t", id, includeHA)
@@ -65,24 +66,24 @@ func (es *BaseService) GetEntity(id int, includeHA bool) (*models.Entity, error)
 	// Convert EntityResponse to Entity
 	entity := entityResp.ToEntity()
 
-	logger.Info("GetEntityByID successful",
+	logger.Info("GetEntity successful",
 		zap.Int("entityID", entity.ID),
 		zap.String("entityType", entity.Type))
 	return &entity, nil
 }
 
 var ALLOWDELETE = []string{
-	"HostRecord",
-	"ExternalHostRecord",
-	"AliasRecord",
-	"IP4Address",
-	"MACAddress",
-	"MACPool",
+	types.HOSTRECORD,
+	types.EXTERNALHOST,
+	types.CNAMERECORD,
+	types.IP4ADDRESS,
+	types.MACADDRESS,
+	types.MACPOOL,
 }
 
 // DeleteEntity Deletes an entity by ID from bluecat
 func (es *BaseService) DeleteEntity(id int) error {
-	logger.Info("DeleteEntityByID started", zap.Int("id", id))
+	logger.Info("DeleteEntity started", zap.Int("id", id))
 
 	// Get the entity type
 	entity, err := es.GetEntity(id, false)
@@ -113,7 +114,7 @@ func (es *BaseService) DeleteEntity(id int) error {
 		return err
 	}
 
-	logger.Info("DeleteEntityByID successful", zap.Int("id", id))
+	logger.Info("DeleteEntity successful", zap.Int("id", id))
 	return nil
 }
 

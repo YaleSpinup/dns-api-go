@@ -16,7 +16,7 @@ func (m *MockBaseService) GetEntity(id int, includeHA bool) (*models.Entity, err
 		return m.GetEntityFunc(id, includeHA)
 	}
 
-	return nil, errors.New("GetEntityByID not mocked")
+	return nil, errors.New("GetEntity not mocked")
 }
 
 func (m *MockBaseService) DeleteEntity(id int) error {
@@ -24,7 +24,7 @@ func (m *MockBaseService) DeleteEntity(id int) error {
 		return m.DeleteEntityFunc(id)
 	}
 
-	return errors.New("DeleteEntityByID not mocked")
+	return errors.New("DeleteEntity not mocked")
 }
 
 func (m *MockBaseService) GetEntities(start int, count int, parentId int, entityType string, includeHA bool) (*[]models.Entity, error) {

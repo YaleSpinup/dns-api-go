@@ -22,7 +22,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestGetEntityByID(t *testing.T) {
+func TestGetEntity(t *testing.T) {
 	tests := []struct {
 		name                    string
 		entityId                int
@@ -117,61 +117,61 @@ func TestGetEntityByID(t *testing.T) {
 	}
 }
 
-func TestDeleteEntityByID(t *testing.T) {
+func TestDeleteEntity(t *testing.T) {
 	tests := []struct {
-		name                       string
-		entityId                   int
-		mockMakeReqGetEntByIDResp  []byte
-		mockMakeReqGetEntByIDError error
-		mockMakeReqDelEntByIDError error
-		expectedError              error
+		name                   string
+		entityId               int
+		mockMakeReqGetEntResp  []byte
+		mockMakeReqGetEntError error
+		mockMakeReqDelEntError error
+		expectedError          error
 	}{
 		{
 			name:     "Successful deletion",
 			entityId: 1,
-			mockMakeReqGetEntByIDResp: []byte(`{
+			mockMakeReqGetEntResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
 				"properties": "TestProperties"
 			}`),
-			mockMakeReqGetEntByIDError: nil,
-			mockMakeReqDelEntByIDError: nil,
-			expectedError:              nil,
+			mockMakeReqGetEntError: nil,
+			mockMakeReqDelEntError: nil,
+			expectedError:          nil,
 		},
 		{
-			name:                       "GetEntityByID error",
-			entityId:                   999,
-			mockMakeReqGetEntByIDResp:  nil,
-			mockMakeReqGetEntByIDError: errors.New("Simulating GetEntityByID error"),
-			mockMakeReqDelEntByIDError: nil,
-			expectedError:              errors.New("Simulating GetEntityByID error"),
+			name:                   "GetEntity error",
+			entityId:               999,
+			mockMakeReqGetEntResp:  nil,
+			mockMakeReqGetEntError: errors.New("Simulating GetEntity error"),
+			mockMakeReqDelEntError: nil,
+			expectedError:          errors.New("Simulating GetEntity error"),
 		},
 		{
 			name:     "Entity deletion not allowed",
 			entityId: 1,
-			mockMakeReqGetEntByIDResp: []byte(`{
+			mockMakeReqGetEntResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
 				"type": "INVALIDTYPE",
 				"properties": "TestProperties"
 			}`),
-			mockMakeReqGetEntByIDError: nil,
-			mockMakeReqDelEntByIDError: nil,
-			expectedError:              &ErrDeleteNotAllowed{Type: "INVALIDTYPE"},
+			mockMakeReqGetEntError: nil,
+			mockMakeReqDelEntError: nil,
+			expectedError:          &ErrDeleteNotAllowed{Type: "INVALIDTYPE"},
 		},
 		{
 			name:     "MakeRequest error",
 			entityId: 1,
-			mockMakeReqGetEntByIDResp: []byte(`{
+			mockMakeReqGetEntResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
 				"properties": "TestProperties"
 			}`),
-			mockMakeReqGetEntByIDError: nil,
-			mockMakeReqDelEntByIDError: errors.New("Simulating MakeRequest error"),
-			expectedError:              errors.New("Simulating MakeRequest error"),
+			mockMakeReqGetEntError: nil,
+			mockMakeReqDelEntError: errors.New("Simulating MakeRequest error"),
+			expectedError:          errors.New("Simulating MakeRequest error"),
 		},
 	}
 
@@ -180,9 +180,9 @@ func TestDeleteEntityByID(t *testing.T) {
 			mockServer := &mocks.MockServer{
 				MakeRequestFunc: func(method, route, queryParam string) ([]byte, error) {
 					if strings.Contains(route, "getEntityById") {
-						return tc.mockMakeReqGetEntByIDResp, tc.mockMakeReqGetEntByIDError
+						return tc.mockMakeReqGetEntResp, tc.mockMakeReqGetEntError
 					} else if strings.Contains(route, "delete") {
-						return nil, tc.mockMakeReqDelEntByIDError
+						return nil, tc.mockMakeReqDelEntError
 					} else {
 						return nil, errors.New("unexpected route")
 					}
