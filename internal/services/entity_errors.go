@@ -17,3 +17,12 @@ type ErrEntityNotFound struct{}
 func (e *ErrEntityNotFound) Error() string {
 	return "entity not found"
 }
+
+type ErrEntityTypeMismatch struct {
+	ExpectedType string
+	ActualType   string
+}
+
+func (e *ErrEntityTypeMismatch) Error() string {
+	return fmt.Sprintf("entity type mismatch: expected %s, got %s", e.ExpectedType, e.ActualType)
+}
