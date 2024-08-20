@@ -45,8 +45,8 @@ func (s *server) routes() {
 	accountRouter.HandleFunc("/id/{id}", s.DeleteEntityHandler()).Methods(http.MethodDelete)
 
 	// Manage Zones
-	api.HandleFunc("/{account}/zones", s.ProxyRequestHandler).Methods(http.MethodGet)
-	api.HandleFunc("/{account}/zones/{id}", s.ProxyRequestHandler).Methods(http.MethodGet)
+	api.HandleFunc("/{account}/zones", s.GetZonesHandler).Methods(http.MethodGet)
+	api.HandleFunc("/{account}/zones/{id}", s.GetZoneHandler).Methods(http.MethodGet)
 
 	// Manage DNS records
 	api.HandleFunc("/{account}/records", s.ProxyRequestHandler).Methods(http.MethodGet, http.MethodPost)
