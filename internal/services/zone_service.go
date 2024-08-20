@@ -3,6 +3,7 @@ package services
 import (
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
+	"dns-api-go/internal/types"
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
@@ -34,7 +35,7 @@ func (zs *ZoneService) GetZones(start int, count int, options map[string]string)
 		zap.Any("options", options))
 
 	// Retrieve Configuration Id
-	containers, err := zs.GetEntities(0, 1, 0, "Configuration", false)
+	containers, err := zs.GetEntities(0, 1, 0, types.CONFIGURATION, false)
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +82,11 @@ func (zs *ZoneService) GetZone(zoneId int, includeHA bool) (*models.Entity, erro
 	entity, err := zs.EntityGetter.GetEntity(zoneId, includeHA)
 	if err != nil {
 		return nil, err
+	}
+
+	// Check if the entity type is a zone
+	if entity.Type != types.ZONE {
+		return nil, &ErrEntityTypeMismatch{ExpectedType: types.ZONE, ActualType: entity.Type}
 	}
 
 	logger.Info("GetZone successful",
