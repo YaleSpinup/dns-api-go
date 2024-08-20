@@ -1,7 +1,9 @@
 package api
 
 import (
+	"dns-api-go/logger"
 	"fmt"
+	"go.uber.org/zap"
 	"net/http"
 	"strconv"
 )
@@ -72,4 +74,13 @@ func parseGetZoneParams(r *http.Request) (*GetZoneParams, error) {
 
 func (s *server) GetZonesHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse the entity parameters from the request
+	params, err := parseGetZonesParams(r)
+	if err != nil {
+		logger.Warn("Invalid request parameters", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Call the service to get zones
+	zones, err := s.ZoneService.GetZones(params.offset, params.limit, params.hint)
 }
