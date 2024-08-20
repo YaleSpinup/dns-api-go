@@ -59,17 +59,14 @@ func (zs *ZoneService) GetZones(start int, count int, options map[string]string)
 	}
 
 	// Unmarshal the response
-	var zonesResp []EntityResponse
+	var zonesResp []models.EntityResponse
 	if err := json.Unmarshal(resp, &zonesResp); err != nil {
 		logger.Error("Error unmarshalling zones response", zap.Error(err))
 		return nil, err
 	}
 
 	// For each zone entity response, convert it to an entity
-	zones := make([]models.Entity, 0, len(zonesResp))
-	for i, zoneResp := range zonesResp {
-		zones[i] = *zoneResp.ToEntity()
-	}
+	zones := models.ConvertToEntities(zonesResp)
 
 	logger.Info("GetZones successful", zap.Int("count", len(zones)))
 	return &zones, nil
