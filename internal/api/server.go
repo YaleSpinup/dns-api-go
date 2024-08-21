@@ -64,6 +64,7 @@ type bluecat struct {
 
 type Services struct {
 	BaseService *services.BaseService
+	ZoneService *services.ZoneService
 }
 
 type server struct {
