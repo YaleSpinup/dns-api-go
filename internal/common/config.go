@@ -27,7 +27,6 @@ import (
 // Config is representation of the configuration data
 type Config struct {
 	ListenAddress string
-	Account       Account
 	Token         string
 	ProxyBackend  *ProxyBackend
 	Bluecat       *Bluecat
@@ -47,16 +46,6 @@ type Bluecat struct {
 	BaseUrl  string
 	Username string
 	Password string
-}
-
-// Account is the configuration for an individual account
-type Account struct {
-	Endpoint   string
-	ExternalID string
-	Akid       string
-	Secret     string
-	Region     string
-	Role       string
 }
 
 // Version carries around the API version information

@@ -18,23 +18,17 @@ package api
 
 import (
 	"context"
+	"dns-api-go/internal/common"
 	"dns-api-go/internal/services"
-	"encoding/json"
 	"errors"
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 	"math/rand"
 	"net/http"
 	"os"
 	"sync"
 	"time"
-
-	"dns-api-go/iam"
-	"dns-api-go/internal/common"
-	"dns-api-go/session"
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
-	"github.com/patrickmn/go-cache"
-
-	log "github.com/sirupsen/logrus"
 )
 
 func init() {
@@ -71,16 +65,13 @@ type Services struct {
 }
 
 type server struct {
-	router       *mux.Router
-	version      *apiVersion
-	context      context.Context
-	session      session.Session
-	sessionCache *cache.Cache
-	backend      *proxyBackend
-	bluecat      *bluecat
-	orgPolicy    string
-	org          string
-	services     Services
+	router   *mux.Router
+	version  *apiVersion
+	context  context.Context
+	backend  *proxyBackend
+	bluecat  *bluecat
+	org      string
+	services Services
 }
 
 // NewServer creates a new server and starts it
@@ -94,10 +85,9 @@ func NewServer(config common.Config) error {
 	}
 
 	s := server{
-		router:       mux.NewRouter(),
-		context:      ctx,
-		org:          config.Org,
-		sessionCache: cache.New(600*time.Second, 900*time.Second),
+		router:  mux.NewRouter(),
+		context: ctx,
+		org:     config.Org,
 	}
 
 	s.version = &apiVersion{
@@ -105,12 +95,6 @@ func NewServer(config common.Config) error {
 		GitHash:    config.Version.GitHash,
 		BuildStamp: config.Version.BuildStamp,
 	}
-
-	orgPolicy, err := orgTagAccessPolicy(config.Org)
-	if err != nil {
-		return err
-	}
-	s.orgPolicy = orgPolicy
 
 	if b := config.Bluecat; b != nil {
 		log.Debugf("configuring bluecat %s", b.BaseUrl)
@@ -135,15 +119,6 @@ func NewServer(config common.Config) error {
 			prefix:  b.BackendPrefix,
 		}
 	}
-
-	// Create a new session used for authentication and assuming cross account roles
-	log.Debugf("Creating new session with key '%s' in region '%s'", config.Account.Akid, config.Account.Region)
-	s.session = session.New(
-		session.WithCredentials(config.Account.Akid, config.Account.Secret, ""),
-		session.WithRegion(config.Account.Region),
-		session.WithExternalID(config.Account.ExternalID),
-		session.WithExternalRoleName(config.Account.Role),
-	)
 
 	publicURLs := map[string]string{
 		"/v2/dns/ping":    "public",
@@ -252,32 +227,4 @@ func retry(attempts int, doubling int, sleep time.Duration, f func() error) erro
 	}
 
 	return nil
-}
-
-// orgTagAccessPolicy generates the org tag conditional policy to be passed inline when assuming a role
-func orgTagAccessPolicy(org string) (string, error) {
-	log.Debugf("generating org policy document")
-
-	policy := iam.PolicyDocument{
-		Version: "2012-10-17",
-		Statement: []iam.StatementEntry{
-			{
-				Effect:   "Allow",
-				Action:   []string{"*"},
-				Resource: "*",
-				Condition: iam.Condition{
-					"StringEquals": iam.ConditionStatement{
-						"aws:ResourceTag/spinup:org": org,
-					},
-				},
-			},
-		},
-	}
-
-	j, err := json.Marshal(policy)
-	if err != nil {
-		return "", err
-	}
-
-	return string(j), nil
 }
