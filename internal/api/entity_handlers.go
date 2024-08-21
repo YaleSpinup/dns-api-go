@@ -3,7 +3,6 @@ package api
 import (
 	"dns-api-go/internal/services"
 	"dns-api-go/logger"
-	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
@@ -77,22 +76,8 @@ func (s *server) GetEntityByIdHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Serialize the entity to JSON and send it in the response
-	jsonResponse, err := json.Marshal(entity)
-	if err != nil {
-		// Log the error and respond with an internal server error status
-		logger.Error("Failed to marshal entity into JSON", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Successfully retrieved and marshaled entity; sending back to client
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write(jsonResponse); err != nil {
-		// Log failure to write the response
-		logger.Error("Failed to write response", zap.Error(err))
-	}
+	// Successfully retrieved entity; sending back to client
+	s.respond(w, entity, http.StatusOK)
 }
 
 // DeleteEntityByIdHandler handles DELETE requests for deleting an entity by ID.
@@ -126,5 +111,5 @@ func (s *server) DeleteEntityByIdHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Successfully deleted the entity; acknowledging with no content status
-	w.WriteHeader(http.StatusNoContent)
+	s.respond(w, nil, http.StatusNoContent)
 }

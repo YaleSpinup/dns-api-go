@@ -19,7 +19,6 @@ package api
 import (
 	"crypto/tls"
 	"dns-api-go/logger"
-	"encoding/json"
 	"fmt"
 	"github.com/YaleSpinup/apierror"
 	"github.com/pkg/errors"
@@ -33,29 +32,15 @@ import (
 
 // PingHandler responds to ping requests
 func (s *server) PingHandler(w http.ResponseWriter, r *http.Request) {
-	w = LogWriter{w}
 	logger.Debug("Ping/Pong")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("pong"))
+	s.respond(w, "pong", http.StatusOK)
 }
 
 // VersionHandler responds to version requests
 func (s *server) VersionHandler(w http.ResponseWriter, r *http.Request) {
-	w = LogWriter{w}
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-
-	data, err := json.Marshal(s.version)
-	if err != nil {
-		logger.Error("Failed to marshal version data", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte{})
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Write(data)
+	s.respond(w, s.version, http.StatusOK)
 }
 
 func (s *server) SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
@@ -77,11 +62,8 @@ func (s *server) SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Set the Content-Type header to application/json
-	w.Header().Set("Content-Type", "application/json")
-
 	// Encode the map as JSON and write it to the response
-	json.NewEncoder(w).Encode(info)
+	s.respond(w, info, http.StatusOK)
 }
 
 func (s *server) generateAuthToken(username, password string) (string, error) {
