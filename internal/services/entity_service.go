@@ -22,12 +22,6 @@ type EntitiesLister interface {
 	GetEntities(start int, count int, parentId int, entityType string, includeHA bool) (*[]models.Entity, error)
 }
 
-type BaseEntityService interface {
-	EntityGetter
-	EntityDeleter
-	EntitiesLister
-}
-
 type BaseService struct {
 	server interfaces.ServerInterface
 }
