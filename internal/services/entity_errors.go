@@ -1,6 +1,9 @@
 package services
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // ErrDeleteNotAllowed indicates an operation is not allowed
 type ErrDeleteNotAllowed struct {
@@ -19,10 +22,11 @@ func (e *ErrEntityNotFound) Error() string {
 }
 
 type ErrEntityTypeMismatch struct {
-	ExpectedType string
-	ActualType   string
+	ExpectedTypes []string
+	ActualType    string
 }
 
 func (e *ErrEntityTypeMismatch) Error() string {
-	return fmt.Sprintf("entity type mismatch: expected %s, got %s", e.ExpectedType, e.ActualType)
+	return fmt.Sprintf("entity type mismatch: expected %s, got %s",
+		strings.Join(e.ExpectedTypes, ", "), e.ActualType)
 }

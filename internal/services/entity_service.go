@@ -1,6 +1,7 @@
 package services
 
 import (
+	"dns-api-go/internal/common"
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
 	"dns-api-go/internal/types"
@@ -15,7 +16,7 @@ type EntityGetter interface {
 }
 
 type EntityDeleter interface {
-	DeleteEntity(id int) error
+	DeleteEntity(id int, expectedTypes []string) error
 }
 
 type EntitiesLister interface {
@@ -76,13 +77,23 @@ var ALLOWDELETE = []string{
 }
 
 // DeleteEntity Deletes an entity by ID from bluecat
-func (es *BaseService) DeleteEntity(id int) error {
+func (es *BaseService) DeleteEntity(id int, expectedTypes []string) error {
 	logger.Info("DeleteEntity started", zap.Int("id", id))
 
 	// Get the entity type
 	entity, err := es.GetEntity(id, false)
 	if err != nil {
 		return err
+	}
+
+	// If the entity type in Bluecat is not among the expected types, do not delete it
+	if len(expectedTypes) > 0 && !common.Contains(expectedTypes, entity.Type) {
+		logger.Info("Entity type does not match expected types",
+			zap.Int("id", id),
+			zap.String("type", entity.Type),
+			zap.Any("expectedTypes", expectedTypes))
+
+		return &ErrEntityTypeMismatch{expectedTypes, entity.Type}
 	}
 
 	// Check if the entity type is allowed to be deleted
