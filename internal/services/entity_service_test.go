@@ -4,7 +4,6 @@ import (
 	"dns-api-go/internal/common"
 	"dns-api-go/internal/mocks"
 	"dns-api-go/internal/models"
-	"dns-api-go/internal/types"
 	"github.com/pkg/errors"
 	"os"
 	"reflect"
@@ -40,14 +39,14 @@ func TestGetEntity(t *testing.T) {
 			mockMakeRequestResponse: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
-				"type": "` + types.HOSTRECORD + `",
+				"type": "HostRecord",
 				"properties": "TestProperties"
 			}`),
 			mockMakeRequestError: nil,
 			expectedResponse: &models.Entity{
 				ID:         1,
 				Name:       "Test Entity",
-				Type:       types.HOSTRECORD,
+				Type:       "HostRecord",
 				Properties: "TestProperties",
 			},
 			expectedError: nil,
@@ -131,11 +130,11 @@ func TestDeleteEntity(t *testing.T) {
 		{
 			name:          "Successful deletion with expected types",
 			entityId:      1,
-			expectedTypes: []string{types.HOSTRECORD, types.CNAMERECORD},
+			expectedTypes: []string{"HostRecord", "AliasRecord"},
 			mockMakeReqGetEntResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
-				"type": "` + types.HOSTRECORD + `",
+				"type": "HostRecord",
 				"properties": "TestProperties"
 			}`),
 			mockMakeReqGetEntError: nil,
@@ -149,7 +148,7 @@ func TestDeleteEntity(t *testing.T) {
 			mockMakeReqGetEntResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
-				"type": "` + types.HOSTRECORD + `",
+				"type": "HostRecord",
 				"properties": "TestProperties"
 			}`),
 			mockMakeReqGetEntError: nil,
@@ -159,7 +158,7 @@ func TestDeleteEntity(t *testing.T) {
 		{
 			name:                   "GetEntity error",
 			entityId:               999,
-			expectedTypes:          []string{types.HOSTRECORD},
+			expectedTypes:          []string{"HostRecord"},
 			mockMakeReqGetEntResp:  nil,
 			mockMakeReqGetEntError: errors.New("Simulating GetEntity error"),
 			mockMakeReqDelEntError: nil,
@@ -168,7 +167,7 @@ func TestDeleteEntity(t *testing.T) {
 		{
 			name:          "Entity type mismatch",
 			entityId:      1,
-			expectedTypes: []string{types.HOSTRECORD},
+			expectedTypes: []string{"HostRecord"},
 			mockMakeReqGetEntResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
@@ -177,7 +176,7 @@ func TestDeleteEntity(t *testing.T) {
 			}`),
 			mockMakeReqGetEntError: nil,
 			mockMakeReqDelEntError: nil,
-			expectedError:          &ErrEntityTypeMismatch{ExpectedTypes: []string{types.HOSTRECORD}, ActualType: "INVALIDTYPE"},
+			expectedError:          &ErrEntityTypeMismatch{ExpectedTypes: []string{"HostRecord"}, ActualType: "INVALIDTYPE"},
 		},
 		{
 			name:          "Entity deletion not allowed",
@@ -196,11 +195,11 @@ func TestDeleteEntity(t *testing.T) {
 		{
 			name:          "MakeRequest error",
 			entityId:      1,
-			expectedTypes: []string{types.HOSTRECORD},
+			expectedTypes: []string{"HostRecord"},
 			mockMakeReqGetEntResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
-				"type": "` + types.HOSTRECORD + `",
+				"type": "HostRecord",
 				"properties": "TestProperties"
 			}`),
 			mockMakeReqGetEntError: nil,
