@@ -133,8 +133,11 @@ func (s *server) MakeRequest(method, route, queryParam string) ([]byte, error) {
 	return body, nil
 }
 
+// respond writes the response to the client
+// adds a newline to the end of the response body
 func (s *server) respond(w http.ResponseWriter, data interface{}, status int) {
 	w.WriteHeader(status)
+
 	if data != nil {
 		w.Header().Set("Content-Type", "application/json")
 		err := json.NewEncoder(w).Encode(data)
