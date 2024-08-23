@@ -133,7 +133,7 @@ func (es *BaseService) GetEntities(start int, count int, parentId int, entityTyp
 
 	// Send http request to bluecat
 	route := "/getEntities"
-	params := fmt.Sprintf("start=%d&count=%d&parentId=%d&entityType=%s&includeHA=%t",
+	params := fmt.Sprintf("start=%d&count=%d&parentId=%d&type=%s&includeHA=%t",
 		start, count, parentId, entityType, includeHA)
 	resp, err := es.server.MakeRequest("GET", route, params)
 
