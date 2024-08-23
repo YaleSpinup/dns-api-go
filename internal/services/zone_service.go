@@ -13,7 +13,7 @@ import (
 
 type ZoneEntityService interface {
 	GetZones(start int, count int, options map[string]string) (*[]models.Entity, error)
-	GetZone(zoneId int, includeHA bool) (*models.Entity, error)
+	GetEntity(zoneId int, includeHA bool) (*models.Entity, error)
 }
 
 type ZoneService struct {
@@ -75,7 +75,7 @@ func (zs *ZoneService) GetZones(start int, count int, options map[string]string)
 	return &zones, nil
 }
 
-func (zs *ZoneService) GetZone(zoneId int, includeHA bool) (*models.Entity, error) {
+func (zs *ZoneService) GetEntity(zoneId int, includeHA bool) (*models.Entity, error) {
 	logger.Info("GetZone started", zap.Int("zoneId", zoneId))
 
 	// Call EntityGetter
@@ -86,7 +86,7 @@ func (zs *ZoneService) GetZone(zoneId int, includeHA bool) (*models.Entity, erro
 
 	// Check if the entity type is a zone
 	if entity.Type != types.ZONE {
-		return nil, &ErrEntityTypeMismatch{ExpectedType: types.ZONE, ActualType: entity.Type}
+		return nil, &ErrEntityTypeMismatch{ExpectedTypes: []string{types.ZONE}, ActualType: entity.Type}
 	}
 
 	logger.Info("GetZone successful",
