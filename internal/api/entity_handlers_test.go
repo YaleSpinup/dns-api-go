@@ -95,7 +95,7 @@ func TestParseEntityParams(t *testing.T) {
 	}
 }
 
-func TestGetEntityIDHandler(t *testing.T) {
+func TestGetEntityHandler(t *testing.T) {
 	tests := []struct {
 		name           string
 		id             string
