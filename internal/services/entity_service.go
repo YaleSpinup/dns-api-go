@@ -123,6 +123,8 @@ func (es *BaseService) DeleteEntity(id int, expectedTypes []string) error {
 	return nil
 }
 
+// GetEntities retrieves a list of entities from Bluecat based on the provided parameters.
+// Note: The maximum value for count is 10.
 func (es *BaseService) GetEntities(start int, count int, parentId int, entityType string, includeHA bool) (*[]models.Entity, error) {
 	logger.Info("GetEntities started",
 		zap.Int("start", start),
