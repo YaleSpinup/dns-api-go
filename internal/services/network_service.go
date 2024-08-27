@@ -75,3 +75,23 @@ func (ns *NetworkService) GetNetworks(start int, count int, options map[string]s
 	logger.Info("GetNetworks successful", zap.Int("count", len(networks)))
 	return &networks, nil
 }
+
+func (ns *NetworkService) GetEntity(networkId int, includeHA bool) (*models.Entity, error) {
+	logger.Info("GetNetwork started", zap.Int("networkId", networkId))
+
+	// Call EntityGetter
+	entity, err := ns.EntityGetter.GetEntity(networkId, includeHA)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the entity type is a network
+	if entity.Type != types.NETWORK {
+		return nil, &ErrEntityTypeMismatch{ExpectedTypes: []string{types.NETWORK}, ActualType: entity.Type}
+	}
+
+	logger.Info("GetNetwork successful",
+		zap.Int("entityId", entity.ID),
+		zap.String("entityType", entity.Type))
+	return entity, nil
+}
