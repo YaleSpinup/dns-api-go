@@ -10,4 +10,5 @@ const (
 	MACADDRESS    = "MACAddress"
 	MACPOOL       = "MACPool"
 	ZONE          = "Zone"
+	NETWORK       = "IP4Network"
 )
