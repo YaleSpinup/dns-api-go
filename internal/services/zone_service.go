@@ -28,6 +28,7 @@ func NewZoneService(server interfaces.ServerInterface, entitiesLister EntitiesLi
 }
 
 // GetZones Retrieves zones from bluecat
+// The maximum that count can be is 10.
 func (zs *ZoneService) GetZones(start int, count int, options map[string]string) (*[]models.Entity, error) {
 	logger.Info("GetZones started",
 		zap.Int("start", start),
