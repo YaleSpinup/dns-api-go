@@ -53,7 +53,7 @@ func (s *server) routes() {
 	api.HandleFunc("/{account}/records/{id}", s.ProxyRequestHandler).Methods(http.MethodGet, http.MethodPut, http.MethodDelete)
 
 	// Manage Networks
-	accountRouter.HandleFunc("/networks", s.GetNetworksHandler).Methods(http.MethodGet)
+	accountRouter.HandleFunc("/networks", s.GetNetworksHandler()).Methods(http.MethodGet)
 	accountRouter.HandleFunc("/networks/{id}", s.GetNetworkHandler()).Methods(http.MethodGet)
 
 	// Manage IP addresses
