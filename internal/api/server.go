@@ -112,7 +112,7 @@ func NewServer(config common.Config) error {
 
 	// Define services that interact with Bluecat entities
 	baseService := services.NewBaseService(&s)
-	zoneService := services.NewZoneService(&s, baseService, baseService)
+	zoneService := services.NewZoneService(&s, baseService)
 	s.services = Services{
 		BaseService: baseService,
 		ZoneService: zoneService,
