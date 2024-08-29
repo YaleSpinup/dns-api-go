@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
+	"strings"
 )
 
 type EntityGetter interface {
@@ -20,7 +21,7 @@ type EntityDeleter interface {
 }
 
 type EntitiesLister interface {
-	GetEntities(start int, count int, parentId int, entityType string, includeHA bool) (*[]models.Entity, error)
+	GetEntitiesByHint(route string, start int, count int, options map[string]string) (*[]models.Entity, error)
 }
 
 type BaseService struct {
@@ -155,5 +156,52 @@ func (es *BaseService) GetEntities(start int, count int, parentId int, entityTyp
 	entities := models.ConvertToEntities(entitiesResp)
 
 	logger.Info("GetEntities successful", zap.Int("count", len(entities)))
+	return &entities, nil
+}
+
+// GetEntitiesByHint retrieves a list of entities from Bluecat based on the provided api route and options.
+func (es *BaseService) GetEntitiesByHint(route string, start int, count int, options map[string]string) (*[]models.Entity, error) {
+	logger.Info("GetEntitiesByHint started",
+		zap.Int("start", start),
+		zap.Int("count", count),
+		zap.Any("options", options))
+
+	// Retrieve Configuration Id
+	containers, err := es.GetEntities(0, 1, 0, types.CONFIGURATION, false)
+	if err != nil {
+		return nil, err
+	}
+	if len(*containers) == 0 {
+		return nil, fmt.Errorf("failed to retrieve containerId")
+	}
+	configId := (*containers)[0].ID
+
+	// Construct the request parameters
+	params := fmt.Sprintf("containerId=%d&start=%d&count=%d", configId, start, count)
+	if len(options) > 0 {
+		opts := make([]string, 0, len(options))
+		for key, value := range options {
+			opts = append(opts, fmt.Sprintf("%s=%s", key, value))
+		}
+		params += "&options=" + strings.Join(opts, "|")
+	}
+
+	// Use the configuration ID to call the Bluecat API to get entities by hint
+	resp, err := es.server.MakeRequest("GET", route, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the response
+	var entitiesResp []models.EntityResponse
+	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
+		logger.Error("Error unmarshalling entities response", zap.Error(err))
+		return nil, err
+	}
+
+	// For each entity response, convert it to an entity
+	entities := models.ConvertToEntities(entitiesResp)
+
+	logger.Info("GetEntitiesByHint successful", zap.Int("count", len(entities)))
 	return &entities, nil
 }
