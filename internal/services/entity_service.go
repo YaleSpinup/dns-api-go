@@ -11,18 +11,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type EntityGetter interface {
-	GetEntity(id int, includeHA bool) (*models.Entity, error)
-}
-
-type EntityDeleter interface {
-	DeleteEntity(id int, expectedTypes []string) error
-}
-
-type EntitiesLister interface {
-	GetEntitiesByHint(start int, count int, options map[string]string) (*[]models.Entity, error)
-}
-
 type BaseService struct {
 	server interfaces.ServerInterface
 }
