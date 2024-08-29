@@ -26,17 +26,18 @@ func NewZoneService(server interfaces.ServerInterface, entityGetter interfaces.E
 // GetEntitiesByHint Retrieves zones from bluecat
 // Note: The maximum that count can be is 10.
 func (zs *ZoneService) GetEntitiesByHint(start int, count int, options map[string]string) (*[]models.Entity, error) {
-	logger.Info("GetZones started",
+	logger.Info("GetEntitiesByHint started",
 		zap.Int("start", start),
 		zap.Int("count", count),
 		zap.Any("options", options))
 
-	zones, err := GetEntitiesByHintHelper(zs.server, "/getZonesByHint", start, count, options)
+	route := "/getZonesByHint"
+	zones, err := GetEntitiesByHintHelper(zs.server, route, start, count, options)
 	if err != nil {
 		return nil, err
 	}
 
-	logger.Info("GetZones successful", zap.Int("count", len(*zones)))
+	logger.Info("GetEntitiesByHint successful", zap.Int("count", len(*zones)))
 	return zones, nil
 }
 
