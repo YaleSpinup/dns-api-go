@@ -10,10 +10,17 @@ import (
 	"strconv"
 )
 
-// EntityParams represents the parameters for entity handlers.
+// EntityParams represents the parameters for get entity handlers.
 type EntityParams struct {
 	ID        int
 	IncludeHA bool
+}
+
+// EntitiesByHintParams represents the parameters for get entities by hint handlers.
+type EntitiesByHintParams struct {
+	offset int
+	limit  int
+	hint   string
 }
 
 // parseEntityParams parses and validates the parameters from the request.
@@ -42,6 +49,57 @@ func parseEntityParams(r *http.Request) (*EntityParams, error) {
 	return &EntityParams{
 		ID:        id,
 		IncludeHA: includeHA,
+	}, nil
+}
+
+// parseEntitiesByHintParams parses and validates the parameters from the request.
+func parseEntitiesByHintParams(r *http.Request) (*EntitiesByHintParams, error) {
+	// Set default values
+	offset := 0
+	limit := 10
+	hint := ""
+
+	query := r.URL.Query()
+
+	// Parse offset if it is not empty
+	if offsetStr := query.Get("offset"); offsetStr != "" {
+		parsedOffset, err := strconv.Atoi(offsetStr)
+		// Return error if offset is not a valid integer
+		if err != nil {
+			return nil, fmt.Errorf("invalid offset value: %v", err)
+		}
+		// Return error if offset is negative
+		if parsedOffset < 0 {
+			return nil, fmt.Errorf("offset cannot be negative")
+		}
+		// Override the default value
+		offset = parsedOffset
+	}
+
+	// Parse limit if it is not empty
+	if limitStr := query.Get("limit"); limitStr != "" {
+		parsedLimit, err := strconv.Atoi(limitStr)
+		// Return error if limit is not a valid integer
+		if err != nil {
+			return nil, fmt.Errorf("invalid limit value: %v", err)
+		}
+		// Return error if limit is negative
+		if parsedLimit < 0 {
+			return nil, fmt.Errorf("limit cannot be negative")
+		}
+		// Override the default value
+		limit = parsedLimit
+	}
+
+	// Parse hint if it is not empty
+	if hintStr := query.Get("hint"); hintStr != "" {
+		hint = hintStr
+	}
+
+	return &EntitiesByHintParams{
+		offset: offset,
+		limit:  limit,
+		hint:   hint,
 	}, nil
 }
 
@@ -81,4 +139,30 @@ func (s *server) HandleGetEntityReq(service services.EntityGetter) http.HandlerF
 		// Successfully retrieved entity; sending back to client
 		s.respond(w, entity, http.StatusOK)
 	}
+}
+
+// HandleGetEntitiesByHintReq returns an HTTP handler function that processes requests to retrieve entities by hint.
+// It uses the provided EntitiesLister interface to fetch the entities and handles various error scenarios.
+func (s *server) HandleGetEntitiesByHintReq(service services.EntitiesLister) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Parse the entity parameters from the request
+		params, err := parseEntitiesByHintParams(r)
+		if err != nil {
+			logger.Warn("Invalid request parameters", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Call the service to get entities by hint
+		entities, err := service.GetEntitiesByHint(params.offset, params.limit, map[string]string{"hint": params.hint})
+		if err != nil {
+			logger.Error("Failed to get entities", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Set the response headers and write the JSON response
+		s.respond(w, entities, http.StatusOK)
+	}
+
 }
