@@ -1,6 +1,7 @@
 package api
 
 import (
+	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/services"
 	"dns-api-go/logger"
 	"fmt"
@@ -105,7 +106,7 @@ func parseEntitiesByHintParams(r *http.Request) (*EntitiesByHintParams, error) {
 
 // HandleGetEntityReq returns an HTTP handler function that processes requests to retrieve an entity by ID.
 // It uses the provided EntityGetter interface to fetch the entity and handles various error scenarios.
-func (s *server) HandleGetEntityReq(service services.EntityGetter) http.HandlerFunc {
+func (s *server) HandleGetEntityReq(service interfaces.EntityGetter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse the entity parameters from the request
 		params, err := parseEntityParams(r)
@@ -143,7 +144,7 @@ func (s *server) HandleGetEntityReq(service services.EntityGetter) http.HandlerF
 
 // HandleGetEntitiesByHintReq returns an HTTP handler function that processes requests to retrieve entities by hint.
 // It uses the provided EntitiesLister interface to fetch the entities and handles various error scenarios.
-func (s *server) HandleGetEntitiesByHintReq(service services.EntitiesLister) http.HandlerFunc {
+func (s *server) HandleGetEntitiesByHintReq(service interfaces.EntitiesByHintLister) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse the entity parameters from the request
 		params, err := parseEntitiesByHintParams(r)
