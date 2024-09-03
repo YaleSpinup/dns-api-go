@@ -1,5 +1,10 @@
 package common
 
+import (
+	"fmt"
+	"strings"
+)
+
 // StringPtr returns a pointer to a string
 func StringPtr(s string) *string {
 	return &s
@@ -14,4 +19,20 @@ func Contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// ConvertToSeparatedString converts a map to a string with a separator
+func ConvertToSeparatedString(array map[string]string, separator string) string {
+	// If array is empty, return empty string
+	if len(array) == 0 {
+		return ""
+	}
+
+	// Create key-value string pairs
+	keyValuePairs := make([]string, 0, len(array))
+	for key, value := range array {
+		keyValuePairs = append(keyValuePairs, fmt.Sprintf("%s=%s", key, value))
+	}
+
+	return strings.Join(keyValuePairs, separator)
 }

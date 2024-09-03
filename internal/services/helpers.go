@@ -1,6 +1,7 @@
 package services
 
 import (
+	"dns-api-go/internal/common"
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
 	"dns-api-go/internal/types"
@@ -8,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
-	"strings"
 )
 
 // GetConfigID retrieves the configuration ID from Bluecat.
@@ -45,13 +45,7 @@ func GetEntitiesByHintHelper(server interfaces.ServerInterface, route string, st
 
 	// Construct the request parameters
 	params := fmt.Sprintf("containerId=%d&start=%d&count=%d", containerId, start, count)
-	if len(options) > 0 {
-		opts := make([]string, 0, len(options))
-		for key, value := range options {
-			opts = append(opts, fmt.Sprintf("%s=%s", key, value))
-		}
-		params += "&options=" + strings.Join(opts, "|")
-	}
+	params += "&options=" + common.ConvertToSeparatedString(options, "|")
 
 	// Use the configuration ID to call the Bluecat API to get entities
 	resp, err := server.MakeRequest("GET", route, params)
