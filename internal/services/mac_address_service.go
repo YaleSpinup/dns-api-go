@@ -1,6 +1,7 @@
 package services
 
 import (
+	"dns-api-go/internal/common"
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
 	"dns-api-go/logger"
@@ -79,8 +80,14 @@ func (ms *MacAddressService) CreateMacAddress(mac models.Mac) (int, error) {
 		return -1, err
 	}
 
-	//
+	// Associate mac address with a pool if poolid exists
+	if mac.PoolId != 0 {
+		if err := ms.AssociateMacAddress(mac, configId); err != nil {
+			return -1, err
+		}
+	}
 
+	return objectId, nil
 }
 
 // AddMacAddress Adds a mac address entity in bluecat
@@ -88,8 +95,9 @@ func (ms *MacAddressService) AddMacAddress(mac models.Mac, configId int) (int, e
 	logger.Info("AddMacAddress started", zap.Any("mac", mac))
 
 	// Send request to bluecat
-	route, params := "/addMACAddress", fmt.Sprintf("configurationId=%d&macAddress=%s&macPoolId=%d",
-		configId, mac.Address, mac.Properties)
+	route, params := "/addMACAddress", fmt.Sprintf("configurationId=%d&macAddress=%s",
+		configId, mac.Address)
+	params += "&properties=" + common.ConvertToSeparatedString(mac.Properties, "|")
 	resp, err := ms.server.MakeRequest("POST", route, params)
 	if err != nil {
 		return -1, err
@@ -107,10 +115,21 @@ func (ms *MacAddressService) AddMacAddress(mac models.Mac, configId int) (int, e
 }
 
 // AssociateMacAddress Associates a MAC address with a MAC pool in bluecat
-func (ms *MacAddressService) AssociateMacAddress(macAddress string, poolId int, configId int) error {
-	logger.Info("AssociateMacAddress started", zap.String("macAddress", macAddress), zap.Int("poolId", poolId))
+func (ms *MacAddressService) AssociateMacAddress(mac models.Mac, configId int) error {
+	logger.Info("AssociateMacAddress started", zap.String("macAddress", mac.Address), zap.Int("poolId", mac.PoolId))
 
 	// Send request to bluecat
-	route, params := "/associateMACAddressWithPool", fmt.Sprintf("configurationId=%d&macAddress=%s&macPoolId=%d",
-		configId, macAddress, poolId)
+	route, params := "/associateMACAddressWithPool", fmt.Sprintf("configurationId=%d&macAddress=%s&poolId=%d",
+		configId, mac.Address, mac.PoolId)
+	resp, err := ms.server.MakeRequest("POST", route, params)
+	if err != nil {
+		return err
+	}
+
+	logger.Info("Received response for AssociateMacAddress", zap.ByteString("response", resp))
+	return nil
+}
+
+func (ms *MacAddressService) UpdateMacAddress() {
+
 }
