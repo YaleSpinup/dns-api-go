@@ -36,6 +36,7 @@ func (es *BaseService) GetEntity(id int, includeHA bool) (*models.Entity, error)
 
 	// Check for errors when sending request
 	if err != nil {
+		logger.Error("Error getting entity by ID", zap.Error(err), zap.Int("id", id))
 		return nil, err
 	}
 	logger.Info("Received response for GetEntityByID", zap.ByteString("response", resp))
@@ -110,6 +111,7 @@ func (es *BaseService) DeleteEntity(id int, expectedTypes []string) error {
 
 	// Check for errors while sending request
 	if err != nil {
+		logger.Error("Error deleting entity", zap.Error(err), zap.Int("id", id))
 		return err
 	}
 
@@ -156,15 +158,20 @@ func (es *BaseService) GetEntities(start int, count int, parentId int, entityTyp
 func (es *BaseService) UpdateEntity(entity *models.Entity) error {
 	logger.Info("UpdateEntity started", zap.Int("entityID", entity.ID))
 
-	//// Send http request to bluecat
-	//route := "/update"
-	//params := fmt.Sprintf("entity=%s", entity)
-	//_, err := es.server.MakeRequest("PUT", route, params)
-	//
-	//// Check for errors when sending request
-	//if err != nil {
-	//	return err
-	//}
+	bluecatEntityJSON, err := entity.ToBluecatJSON()
+	if err != nil {
+		logger.Error("Error marshalling entity to JSON for Bluecat", zap.Error(err))
+	}
+
+	// Send http request to bluecat
+	route, params := "/update", fmt.Sprintf("body=%s", string(bluecatEntityJSON))
+	_, err = es.server.MakeRequest("PUT", route, params)
+
+	// Check for errors when sending request
+	if err != nil {
+		logger.Error("Error updating entity", zap.Error(err), zap.Int("entityID", entity.ID))
+		return err
+	}
 
 	logger.Info("UpdateEntity successful", zap.Int("entityID", entity.ID))
 	return nil

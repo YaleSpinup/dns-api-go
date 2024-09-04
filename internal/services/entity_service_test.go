@@ -328,3 +328,70 @@ func TestGetEntities(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateEntity(t *testing.T) {
+	tests := []struct {
+		name                 string
+		entity               *models.Entity
+		mockMakeRequestError error
+		expectedError        error
+	}{
+		{
+			name: "Successful update",
+			entity: &models.Entity{
+				ID:   1,
+				Name: "Test Entity",
+				Type: "HostRecord",
+				Properties: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			mockMakeRequestError: nil,
+			expectedError:        nil,
+		},
+		{
+			name: "Error marshalling entity to JSON",
+			entity: &models.Entity{
+				ID:   1,
+				Name: "Test Entity",
+				Type: "HostRecord",
+				Properties: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			mockMakeRequestError: errors.New("Simulating marshalling error"),
+			expectedError:        errors.New("Simulating marshalling error"),
+		},
+		{
+			name: "Error making request to update entity",
+			entity: &models.Entity{
+				ID:   1,
+				Name: "Test Entity",
+				Type: "HostRecord",
+				Properties: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			mockMakeRequestError: errors.New("Simulating MakeRequest error"),
+			expectedError:        errors.New("Simulating MakeRequest error"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockServer := &mocks.MockServer{
+				MakeRequestFunc: func(method, route, queryParam string) ([]byte, error) {
+					return nil, tc.mockMakeRequestError
+				},
+			}
+
+			entityService := NewBaseService(mockServer)
+			err := entityService.UpdateEntity(tc.entity)
+
+			common.CheckError(t, tc.name, tc.expectedError, err)
+		})
+	}
+}
