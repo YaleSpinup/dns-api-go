@@ -36,3 +36,26 @@ func ConvertToSeparatedString(array map[string]string, separator string) string 
 
 	return strings.Join(keyValuePairs, separator)
 }
+
+// ConvertToMap converts a string with a separator into a map
+func ConvertToMap(inputString, separator string) map[string]string {
+	// return empty map if propString is empty
+	if inputString == "" {
+		return map[string]string{}
+	}
+
+	// Initialize the map
+	resultMap := make(map[string]string)
+
+	// Split the string by the separator to get key-value pairs
+	pairs := strings.Split(inputString, separator)
+	for _, pair := range pairs {
+		// Split each pair by "=" to get key and value
+		keyValue := strings.SplitN(pair, "=", 2)
+		if len(keyValue) == 2 {
+			resultMap[keyValue[0]] = keyValue[1]
+		}
+	}
+
+	return resultMap
+}

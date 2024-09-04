@@ -2,7 +2,6 @@ package models
 
 import (
 	"dns-api-go/internal/common"
-	"reflect"
 	"testing"
 )
 
@@ -18,13 +17,16 @@ func TestToEntity(t *testing.T) {
 				ID:         1,
 				Name:       common.StringPtr("Test Entity"),
 				Type:       common.StringPtr("HostRecord"),
-				Properties: common.StringPtr("Test Properties"),
+				Properties: common.StringPtr("key1=value1|key2=value2"),
 			},
 			expectedEntity: Entity{
-				ID:         1,
-				Name:       "Test Entity",
-				Type:       "HostRecord",
-				Properties: "Test Properties",
+				ID:   1,
+				Name: "Test Entity",
+				Type: "HostRecord",
+				Properties: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
 			},
 		},
 		{
@@ -39,7 +41,7 @@ func TestToEntity(t *testing.T) {
 				ID:         1,
 				Name:       "",
 				Type:       "HostRecord",
-				Properties: "",
+				Properties: map[string]string{},
 			},
 		},
 	}
@@ -47,9 +49,7 @@ func TestToEntity(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			entity := tc.entityResponse.ToEntity()
-			if !reflect.DeepEqual(entity, tc.expectedEntity) {
-				t.Errorf("%s: expected response %+v, got %+v", tc.name, tc.expectedEntity, entity)
-			}
+			common.CheckResponse(t, tc.name, tc.expectedEntity, entity)
 		})
 	}
 }
@@ -67,27 +67,33 @@ func TestConvertToEntities(t *testing.T) {
 					ID:         1,
 					Name:       common.StringPtr("Entity1"),
 					Type:       common.StringPtr("Type1"),
-					Properties: common.StringPtr("Properties1"),
+					Properties: common.StringPtr("key1=value1|key2=value2"),
 				},
 				{
 					ID:         2,
 					Name:       common.StringPtr("Entity2"),
 					Type:       common.StringPtr("Type2"),
-					Properties: common.StringPtr("Properties2"),
+					Properties: common.StringPtr("key3=value3|key4=value4"),
 				},
 			},
 			expectedEntities: []Entity{
 				{
-					ID:         1,
-					Name:       "Entity1",
-					Type:       "Type1",
-					Properties: "Properties1",
+					ID:   1,
+					Name: "Entity1",
+					Type: "Type1",
+					Properties: map[string]string{
+						"key1": "value1",
+						"key2": "value2",
+					},
 				},
 				{
-					ID:         2,
-					Name:       "Entity2",
-					Type:       "Type2",
-					Properties: "Properties2",
+					ID:   2,
+					Name: "Entity2",
+					Type: "Type2",
+					Properties: map[string]string{
+						"key3": "value3",
+						"key4": "value4",
+					},
 				},
 			},
 		},
@@ -111,7 +117,7 @@ func TestConvertToEntities(t *testing.T) {
 					ID:         3,
 					Name:       "",
 					Type:       "Type3",
-					Properties: "",
+					Properties: map[string]string{},
 				},
 			},
 		},
@@ -120,9 +126,7 @@ func TestConvertToEntities(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			entities := ConvertToEntities(tc.entityResponses)
-			if !reflect.DeepEqual(entities, tc.expectedEntities) {
-				t.Errorf("ConvertToEntities() = %+v, expected %+v", entities, tc.expectedEntities)
-			}
+			common.CheckResponse(t, tc.name, tc.expectedEntities, entities)
 		})
 	}
 }

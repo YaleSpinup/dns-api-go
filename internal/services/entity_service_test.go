@@ -39,14 +39,17 @@ func TestGetEntity(t *testing.T) {
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
-				"properties": "TestProperties"
+				"properties": "key1=value1|key2=value2"
 			}`),
 			mockMakeRequestError: nil,
 			expectedResponse: &models.Entity{
-				ID:         1,
-				Name:       "Test Entity",
-				Type:       "HostRecord",
-				Properties: "TestProperties",
+				ID:   1,
+				Name: "Test Entity",
+				Type: "HostRecord",
+				Properties: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
 			},
 			expectedError: nil,
 		},
@@ -119,7 +122,7 @@ func TestDeleteEntity(t *testing.T) {
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
-				"properties": "TestProperties"
+				"properties": "key1=value1|key2=value2"
 			}`),
 			mockMakeReqGetEntError: nil,
 			mockMakeReqDelEntError: nil,
@@ -133,7 +136,7 @@ func TestDeleteEntity(t *testing.T) {
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
-				"properties": "TestProperties"
+				"properties": "key1=value1|key2=value2"
 			}`),
 			mockMakeReqGetEntError: nil,
 			mockMakeReqDelEntError: nil,
@@ -156,7 +159,7 @@ func TestDeleteEntity(t *testing.T) {
 				"id": 1,
 				"name": "Test Entity",
 				"type": "INVALIDTYPE",
-				"properties": "TestProperties"
+				"properties": "key1=value1|key2=value2"
 			}`),
 			mockMakeReqGetEntError: nil,
 			mockMakeReqDelEntError: nil,
@@ -170,7 +173,7 @@ func TestDeleteEntity(t *testing.T) {
 				"id": 1,
 				"name": "Test Entity",
 				"type": "INVALIDTYPE",
-				"properties": "TestProperties"
+				"properties": "key1=value1|key2=value2"
 			}`),
 			mockMakeReqGetEntError: nil,
 			mockMakeReqDelEntError: nil,
@@ -184,7 +187,7 @@ func TestDeleteEntity(t *testing.T) {
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
-				"properties": "TestProperties"
+				"properties": "key1=value1|key2=value2"
 			}`),
 			mockMakeReqGetEntError: nil,
 			mockMakeReqDelEntError: errors.New("Simulating MakeRequest error"),
@@ -239,28 +242,34 @@ func TestGetEntities(t *testing.T) {
                     "id": 1,
                     "name": "Entity1",
                     "type": "HostRecord",
-                    "properties": "Properties1"
+                    "properties": "key1=value1|key2=value2"
                 },
                 {
                     "id": 2,
                     "name": "Entity2",
                     "type": "HostRecord",
-                    "properties": "Properties2"
+                    "properties": "key3=value3|key4=value4"
                 }
             ]`),
 			mockMakeRequestError: nil,
 			expectedResponse: &[]models.Entity{
 				{
-					ID:         1,
-					Name:       "Entity1",
-					Type:       "HostRecord",
-					Properties: "Properties1",
+					ID:   1,
+					Name: "Entity1",
+					Type: "HostRecord",
+					Properties: map[string]string{
+						"key1": "value1",
+						"key2": "value2",
+					},
 				},
 				{
-					ID:         2,
-					Name:       "Entity2",
-					Type:       "HostRecord",
-					Properties: "Properties2",
+					ID:   2,
+					Name: "Entity2",
+					Type: "HostRecord",
+					Properties: map[string]string{
+						"key3": "value3",
+						"key4": "value4",
+					},
 				},
 			},
 			expectedError: nil,

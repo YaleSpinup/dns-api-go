@@ -1,5 +1,7 @@
 package models
 
+import "dns-api-go/internal/common"
+
 type EntityResponse struct {
 	ID         int     `json:"id"`
 	Name       *string `json:"name"`
@@ -11,12 +13,17 @@ type EntityResponse struct {
 func (er *EntityResponse) ToEntity() Entity {
 	// Handle nil pointer dereference if name or properties is null
 	// Type is guaranteed to be non-nil unless entity does not exist, in which case it is handled earlier
-	var name, properties string
+	var name string
+	var properties map[string]string
+
 	if er.Name != nil {
 		name = *er.Name
 	}
+
 	if er.Properties != nil {
-		properties = *er.Properties
+		properties = common.ConvertToMap(*er.Properties, "|")
+	} else {
+		properties = make(map[string]string)
 	}
 
 	// Convert EntityResponse to Entity
