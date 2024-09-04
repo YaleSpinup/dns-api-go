@@ -19,11 +19,12 @@ type MacAddressEntityService interface {
 type MacAddressService struct {
 	server interfaces.ServerInterface
 	interfaces.EntityGetter
+	interfaces.EntityUpdater
 }
 
 // NewMacAddressService Constructor for MacAddressService
-func NewMacAddressService(server interfaces.ServerInterface, entityGetter interfaces.EntityGetter) *MacAddressService {
-	return &MacAddressService{server: server, EntityGetter: entityGetter}
+func NewMacAddressService(server interfaces.ServerInterface, entityGetter interfaces.EntityGetter, entityUpater interfaces.EntityUpdater) *MacAddressService {
+	return &MacAddressService{server: server, EntityGetter: entityGetter, EntityUpdater: entityUpater}
 }
 
 // GetMacAddress Retrieves a mac address entity from bluecat
@@ -45,20 +46,20 @@ func (ms *MacAddressService) GetMacAddress(macAddress string) (*models.Entity, e
 	logger.Info("Received response for GetMacAddress", zap.ByteString("response", resp))
 
 	// Unmarshal the response
-	var entityResp models.EntityResponse
-	if err := json.Unmarshal(resp, &entityResp); err != nil {
+	var bluecatEntity models.BluecatEntity
+	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
 		logger.Error("Error unmarshalling entity response", zap.Error(err))
 		return nil, err
 	}
 
 	// Check if the response represents an empty entity
-	if entityResp.IsEmpty() {
+	if bluecatEntity.IsEmpty() {
 		logger.Info("Entity not found", zap.String("macAddress", macAddress))
 		return nil, &ErrEntityNotFound{}
 	}
 
-	// Convert EntityResponse to Entity
-	entity := entityResp.ToEntity()
+	// Convert BluecatEntity to Entity
+	entity := bluecatEntity.ToEntity()
 
 	logger.Info("GetMacAddress successful", zap.String("macAddress", macAddress))
 	return &entity, nil
@@ -80,7 +81,7 @@ func (ms *MacAddressService) CreateMacAddress(mac models.Mac) (int, error) {
 		return -1, err
 	}
 
-	// Associate mac address with a pool if poolid exists
+	// Associate mac address with a pool if PoolId exists
 	if mac.PoolId != 0 {
 		if err := ms.AssociateMacAddress(mac, configId); err != nil {
 			return -1, err
@@ -130,6 +131,45 @@ func (ms *MacAddressService) AssociateMacAddress(mac models.Mac, configId int) e
 	return nil
 }
 
-func (ms *MacAddressService) UpdateMacAddress() {
+func (ms *MacAddressService) UpdateMacAddress(mac models.Mac, newProperties map[string]string) error {
+	logger.Info("UpdateMacAddress started", zap.Any("mac", mac), zap.Any("newProperties", newProperties))
 
+	// Associate mac address with a pool if poolid exists
+	if mac.PoolId != 0 {
+		// Get the configuration ID
+		configId, err := GetConfigID(ms.server)
+		if err != nil {
+			return err
+		}
+
+		if err := ms.AssociateMacAddress(mac, configId); err != nil {
+			return err
+		}
+	}
+
+	// Return early if newProperties is empty
+	if len(newProperties) == 0 {
+		logger.Info("No new properties to update")
+		return nil
+	}
+
+	// Get the entity by MAC address
+	entity, err := ms.GetMacAddress(mac.Address)
+	if err != nil {
+		return err
+	}
+
+	// Merge new properties into existing entity properties
+	for key, value := range newProperties {
+		entity.Properties[key] = value
+	}
+
+	// Update entity in bluecat
+	err = ms.EntityUpdater.UpdateEntity(entity)
+	if err != nil {
+		return err
+	}
+
+	logger.Info("UpdateMacAddress successful", zap.String("macAddress", mac.Address))
+	return nil
 }
