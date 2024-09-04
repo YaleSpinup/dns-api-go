@@ -8,12 +8,12 @@ import (
 func TestToEntity(t *testing.T) {
 	tests := []struct {
 		name           string
-		entityResponse EntityResponse
+		BluecatEntity  BluecatEntity
 		expectedEntity Entity
 	}{
 		{
 			name: "All fields present",
-			entityResponse: EntityResponse{
+			BluecatEntity: BluecatEntity{
 				ID:         1,
 				Name:       common.StringPtr("Test Entity"),
 				Type:       common.StringPtr("HostRecord"),
@@ -31,7 +31,7 @@ func TestToEntity(t *testing.T) {
 		},
 		{
 			name: "Name and Properties are nil",
-			entityResponse: EntityResponse{
+			BluecatEntity: BluecatEntity{
 				ID:         1,
 				Name:       nil,
 				Type:       common.StringPtr("HostRecord"),
@@ -48,7 +48,7 @@ func TestToEntity(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			entity := tc.entityResponse.ToEntity()
+			entity := tc.BluecatEntity.ToEntity()
 			common.CheckResponse(t, tc.name, tc.expectedEntity, entity)
 		})
 	}
@@ -57,12 +57,12 @@ func TestToEntity(t *testing.T) {
 func TestConvertToEntities(t *testing.T) {
 	tests := []struct {
 		name             string
-		entityResponses  []EntityResponse
+		BluecatEntities  []BluecatEntity
 		expectedEntities []Entity
 	}{
 		{
 			name: "Multiple entities",
-			entityResponses: []EntityResponse{
+			BluecatEntities: []BluecatEntity{
 				{
 					ID:         1,
 					Name:       common.StringPtr("Entity1"),
@@ -99,12 +99,12 @@ func TestConvertToEntities(t *testing.T) {
 		},
 		{
 			name:             "Empty entity response slice",
-			entityResponses:  []EntityResponse{},
+			BluecatEntities:  []BluecatEntity{},
 			expectedEntities: []Entity{},
 		},
 		{
 			name: "Single entity with nil fields",
-			entityResponses: []EntityResponse{
+			BluecatEntities: []BluecatEntity{
 				{
 					ID:         3,
 					Name:       nil,
@@ -125,7 +125,7 @@ func TestConvertToEntities(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			entities := ConvertToEntities(tc.entityResponses)
+			entities := ConvertToEntities(tc.BluecatEntities)
 			common.CheckResponse(t, tc.name, tc.expectedEntities, entities)
 		})
 	}
@@ -134,17 +134,17 @@ func TestConvertToEntities(t *testing.T) {
 func TestIsEmpty(t *testing.T) {
 	tests := []struct {
 		name         string
-		er           EntityResponse
+		er           BluecatEntity
 		expectedResp bool
 	}{
 		{
-			name:         "Completely empty EntityResponse",
-			er:           EntityResponse{},
+			name:         "Completely empty BluecatEntity",
+			er:           BluecatEntity{},
 			expectedResp: true,
 		},
 		{
-			name: "EntityResponse with all fields explicitly set to zero/nil",
-			er: EntityResponse{
+			name: "BluecatEntity with all fields explicitly set to zero/nil",
+			er: BluecatEntity{
 				ID:         0,
 				Name:       nil,
 				Type:       nil,
@@ -153,28 +153,28 @@ func TestIsEmpty(t *testing.T) {
 			expectedResp: true,
 		},
 		{
-			name:         "EntityResponse with only ID set",
-			er:           EntityResponse{ID: 1},
+			name:         "BluecatEntity with only ID set",
+			er:           BluecatEntity{ID: 1},
 			expectedResp: false,
 		},
 		{
-			name:         "EntityResponse with only Name set",
-			er:           EntityResponse{Name: common.StringPtr("Test")},
+			name:         "BluecatEntity with only Name set",
+			er:           BluecatEntity{Name: common.StringPtr("Test")},
 			expectedResp: false,
 		},
 		{
-			name:         "EntityResponse with only Type set",
-			er:           EntityResponse{Type: common.StringPtr("TestType")},
+			name:         "BluecatEntity with only Type set",
+			er:           BluecatEntity{Type: common.StringPtr("TestType")},
 			expectedResp: false,
 		},
 		{
-			name:         "EntityResponse with only Properties set",
-			er:           EntityResponse{Properties: common.StringPtr("Test properties")},
+			name:         "BluecatEntity with only Properties set",
+			er:           BluecatEntity{Properties: common.StringPtr("Test properties")},
 			expectedResp: false,
 		},
 		{
-			name: "EntityResponse with all fields set",
-			er: EntityResponse{
+			name: "BluecatEntity with all fields set",
+			er: BluecatEntity{
 				ID:         1,
 				Name:       common.StringPtr("Test"),
 				Type:       common.StringPtr("TestType"),
@@ -183,8 +183,8 @@ func TestIsEmpty(t *testing.T) {
 			expectedResp: false,
 		},
 		{
-			name: "EntityResponse with zero ID and other fields set",
-			er: EntityResponse{
+			name: "BluecatEntity with zero ID and other fields set",
+			er: BluecatEntity{
 				ID:         0,
 				Name:       common.StringPtr("Test"),
 				Type:       common.StringPtr("TestType"),

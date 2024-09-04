@@ -54,7 +54,7 @@ func GetEntitiesByHintHelper(server interfaces.ServerInterface, route string, st
 	}
 
 	// Unmarshal the response
-	var entitiesResp []models.EntityResponse
+	var entitiesResp []models.BluecatEntity
 	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
 		logger.Error("Error unmarshalling entities response", zap.Error(err))
 		return nil, err

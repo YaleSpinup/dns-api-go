@@ -11,6 +11,12 @@ import (
 	"go.uber.org/zap"
 )
 
+type BaseEntityService interface {
+	GetEntity(id int, includeHA bool) (*models.Entity, error)
+	DeleteEntity(id int, expectedTypes []string) error
+	UpdateEntity(entity *models.Entity) error
+}
+
 type BaseService struct {
 	server interfaces.ServerInterface
 }
@@ -35,19 +41,19 @@ func (es *BaseService) GetEntity(id int, includeHA bool) (*models.Entity, error)
 	logger.Info("Received response for GetEntityByID", zap.ByteString("response", resp))
 
 	// Unmarshal the response
-	var entityResp models.EntityResponse
-	if err := json.Unmarshal(resp, &entityResp); err != nil {
+	var bluecatEntity models.BluecatEntity
+	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
 		logger.Error("Error unmarshalling entity response", zap.Error(err))
 		return nil, err
 	}
 	// Check if the response represents an empty entity
-	if entityResp.IsEmpty() {
+	if bluecatEntity.IsEmpty() {
 		logger.Info("Entity not found", zap.Int("id", id))
 		return nil, &ErrEntityNotFound{}
 	}
 
-	// Convert EntityResponse to Entity
-	entity := entityResp.ToEntity()
+	// Convert BluecatEntity to Entity
+	entity := bluecatEntity.ToEntity()
 
 	logger.Info("GetEntity successful",
 		zap.Int("entityID", entity.ID),
@@ -133,7 +139,7 @@ func (es *BaseService) GetEntities(start int, count int, parentId int, entityTyp
 	}
 
 	// Unmarshal the response
-	var entitiesResp []models.EntityResponse
+	var entitiesResp []models.BluecatEntity
 	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
 		logger.Error("Error unmarshalling entities response", zap.Error(err))
 		return nil, err
@@ -144,4 +150,22 @@ func (es *BaseService) GetEntities(start int, count int, parentId int, entityTyp
 
 	logger.Info("GetEntities successful", zap.Int("count", len(entities)))
 	return &entities, nil
+}
+
+// UpdateEntity Updates an entity in Bluecat
+func (es *BaseService) UpdateEntity(entity *models.Entity) error {
+	logger.Info("UpdateEntity started", zap.Int("entityID", entity.ID))
+
+	//// Send http request to bluecat
+	//route := "/update"
+	//params := fmt.Sprintf("entity=%s", entity)
+	//_, err := es.server.MakeRequest("PUT", route, params)
+	//
+	//// Check for errors when sending request
+	//if err != nil {
+	//	return err
+	//}
+
+	logger.Info("UpdateEntity successful", zap.Int("entityID", entity.ID))
+	return nil
 }
