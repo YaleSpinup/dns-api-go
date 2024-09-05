@@ -54,10 +54,11 @@ func parseMacAddressParams(r *http.Request) (*MacAddressParams, error) {
 	return &MacAddressParams{Address: macAddress}, nil
 }
 
-// parseMacParams parses and validates the parameters from the request.
-func parseMacParams(r *http.Request) (*MacParams, error) {
-	// Extract the mac address parameter
+// parseCreateMacParams parses and validates the parameters from the request.
+func parseCreateMacParams(r *http.Request) (*MacParams, error) {
 	var MacParams MacParams
+
+	// Extract the mac parameters from the request body
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&MacParams); err != nil {
 		return nil, fmt.Errorf("failed to decode request body: %v", err)
@@ -69,6 +70,40 @@ func parseMacParams(r *http.Request) (*MacParams, error) {
 	}
 	if err := validateMacAddress(MacParams.Address); err != nil {
 		return nil, err
+	}
+
+	// Initialize Properties if nil
+	if MacParams.Properties == nil {
+		MacParams.Properties = make(map[string]string)
+	}
+
+	return &MacParams, nil
+}
+
+// parseMacParams parses and validates the parameters from the request.
+func parseUpdateMacParams(r *http.Request) (*MacParams, error) {
+	var MacParams MacParams
+
+	// Extract the mac address parameter from URL
+	vars := mux.Vars(r)
+	macAddress, macAddressOk := vars["mac"]
+
+	// Validate the presence of the required 'mac' parameter
+	if !macAddressOk {
+		return nil, fmt.Errorf("missing required parameter: mac")
+	}
+	// Make sure mac address is in the correct format
+	if err := validateMacAddress(macAddress); err != nil {
+		return nil, err
+	}
+
+	// Set the extracted mac address
+	MacParams.Address = macAddress
+
+	// Extract the rest of the parameters from the request body
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&MacParams); err != nil {
+		return nil, fmt.Errorf("failed to decode request body: %v", err)
 	}
 
 	// Initialize Properties if nil
@@ -104,7 +139,7 @@ func (s *server) GetMacAddressHandler(w http.ResponseWriter, r *http.Request) {
 // CreateMacAddressHandler handles POST requests for creating a mac address.
 func (s *server) CreateMacAddressHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse the mac parameters from the request
-	params, err := parseMacParams(r)
+	params, err := parseCreateMacParams(r)
 	if err != nil {
 		logger.Warn("Invalid request parameters", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -133,7 +168,7 @@ func (s *server) CreateMacAddressHandler(w http.ResponseWriter, r *http.Request)
 // UpdateMacAddressHandler handles PUT requests for updating a mac address.
 func (s *server) UpdateMacAddressHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse the mac parameters from the request
-	params, err := parseMacParams(r)
+	params, err := parseUpdateMacParams(r)
 	if err != nil {
 		logger.Warn("Invalid request parameters", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusBadRequest)
