@@ -62,6 +62,7 @@ func (s *server) routes() {
 	api.HandleFunc("/{account}/ips/cidrs", s.ProxyRequestHandler).Methods(http.MethodGet)
 
 	// Manage MAC addresses
-	api.HandleFunc("/{account}/macs", s.ProxyRequestHandler).Methods(http.MethodPost, http.MethodPut)
-	api.HandleFunc("/{account}/macs/{mac}", s.ProxyRequestHandler).Methods(http.MethodGet)
+	accountRouter.HandleFunc("/{account}/macs{mac}", s.GetMacAddressHandler).Methods(http.MethodGet)
+	accountRouter.HandleFunc("/{account}/macs", s.CreateMacAddressHandler).Methods(http.MethodPost)
+	accountRouter.HandleFunc("/{account}/macs", s.CreateMacAddressHandler).Methods(http.MethodPut)
 }
