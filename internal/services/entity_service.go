@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
+	"strings"
 )
 
 type BaseEntityService interface {
@@ -163,9 +164,12 @@ func (es *BaseService) UpdateEntity(entity *models.Entity) error {
 		logger.Error("Error marshalling entity to JSON for Bluecat", zap.Error(err))
 	}
 
+	// Create an io.Reader from the JSON string
+	body := strings.NewReader(string(bluecatEntityJSON))
+
 	// Send http request to bluecat
-	route, params := "/update", fmt.Sprintf("body=%s", string(bluecatEntityJSON))
-	_, err = es.server.MakeRequest("PUT", route, params, nil)
+	route := "/update"
+	_, err = es.server.MakeRequest("PUT", route, "", body)
 
 	// Check for errors when sending request
 	if err != nil {
