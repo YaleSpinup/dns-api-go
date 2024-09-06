@@ -2,6 +2,7 @@ package api
 
 import (
 	"dns-api-go/internal/models"
+	"dns-api-go/internal/services"
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
@@ -128,8 +129,15 @@ func (s *server) GetMacAddressHandler(w http.ResponseWriter, r *http.Request) {
 	entity, err := s.services.MacAddressService.GetMacAddress(params.Address)
 	if err != nil {
 		logger.Error("Error getting mac address entity", zap.String("macAddress", params.Address), zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		// Determine the type of error and set the HTTP response accordingly
+		switch e := err.(type) {
+		case *services.ErrEntityNotFound:
+			http.Error(w, e.Error(), http.StatusNotFound)
+			return
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// Successfully retrieved entity; sending back to client
@@ -179,8 +187,15 @@ func (s *server) UpdateMacAddressHandler(w http.ResponseWriter, r *http.Request)
 	entity, err := s.services.MacAddressService.GetMacAddress(params.Address)
 	if err != nil {
 		logger.Error("Error getting mac address entity", zap.String("macAddress", params.Address), zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		// Determine the type of error and set the HTTP response accordingly
+		switch e := err.(type) {
+		case *services.ErrEntityNotFound:
+			http.Error(w, e.Error(), http.StatusNotFound)
+			return
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// Create mac object with properties from bluecat
