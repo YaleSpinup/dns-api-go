@@ -30,3 +30,12 @@ func (e *ErrEntityTypeMismatch) Error() string {
 	return fmt.Sprintf("entity type mismatch: expected %s, got %s",
 		strings.Join(e.ExpectedTypes, ", "), e.ActualType)
 }
+
+// ErrEntityAlreadyExists indicates the entity already exists
+type ErrEntityAlreadyExists struct {
+	EntityID string
+}
+
+func (e *ErrEntityAlreadyExists) Error() string {
+	return fmt.Sprintf("entity already exists: %s", e.EntityID)
+}
