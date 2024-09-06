@@ -17,11 +17,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import (
+	"dns-api-go/logger"
 	"encoding/json"
 	"io"
 
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 )
 
 // Config is representation of the configuration data
@@ -58,7 +58,7 @@ type Version struct {
 // ReadConfig decodes the configuration from an io Reader
 func ReadConfig(r io.Reader) (Config, error) {
 	var c Config
-	log.Infoln("decoding configuration...")
+	logger.Info("decoding configuration...")
 	if err := json.NewDecoder(r).Decode(&c); err != nil {
 		return c, errors.Wrap(err, "unable to decode JSON message")
 	}

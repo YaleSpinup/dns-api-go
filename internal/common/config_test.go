@@ -18,6 +18,7 @@ package common
 
 import (
 	"bytes"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -37,6 +38,17 @@ var testConfig = []byte(
 	}`)
 
 var brokenConfig = []byte(`{ "foobar": { "baz": "biz" }`)
+
+func TestMain(m *testing.M) {
+	// Setup phase: Initialize the logger
+	SetupLogger()
+
+	// Run the tests
+	code := m.Run()
+
+	// Exit with the code from m.Run()
+	os.Exit(code)
+}
 
 func TestReadConfig(t *testing.T) {
 	expectedConfig := Config{
