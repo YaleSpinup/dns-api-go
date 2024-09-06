@@ -84,7 +84,6 @@ func parseCreateMacParams(r *http.Request) (*MacParams, error) {
 // parseMacParams parses and validates the parameters from the request.
 func parseUpdateMacParams(r *http.Request) (*MacParams, error) {
 	var MacParams MacParams
-
 	// Extract the mac address parameter from URL
 	vars := mux.Vars(r)
 	macAddress, macAddressOk := vars["mac"]
@@ -161,6 +160,16 @@ func (s *server) CreateMacAddressHandler(w http.ResponseWriter, r *http.Request)
 		Properties: params.Properties,
 	}
 
+	// Check if the mac address entity already exists
+	_, err = s.services.MacAddressService.GetMacAddress(mac.Address)
+	if err == nil {
+		// Entity already exists, return custom error
+		logger.Error("MAC address entity already exists", zap.String("macAddress", mac.Address))
+		existsErr := &services.ErrEntityAlreadyExists{EntityID: mac.Address}
+		http.Error(w, existsErr.Error(), http.StatusConflict)
+		return
+	}
+
 	// Attempt to create the mac address to bluecat and handle potential errors
 	objectId, err := s.services.MacAddressService.CreateMacAddress(*mac)
 	if err != nil {
@@ -183,10 +192,17 @@ func (s *server) UpdateMacAddressHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Get the mac object from inside bluecat to retrieve the properties
-	entity, err := s.services.MacAddressService.GetMacAddress(params.Address)
+	// Create new mac object with new properties
+	mac := &models.Mac{
+		Address:    params.Address,
+		PoolId:     params.PoolId,
+		Properties: params.Properties,
+	}
+
+	// Update the mac object with the new properties
+	err = s.services.MacAddressService.UpdateMacAddress(*mac)
 	if err != nil {
-		logger.Error("Error getting mac address entity", zap.String("macAddress", params.Address), zap.Error(err))
+		logger.Error("Failed to update mac address", zap.Error(err))
 		// Determine the type of error and set the HTTP response accordingly
 		switch e := err.(type) {
 		case *services.ErrEntityNotFound:
@@ -196,21 +212,6 @@ func (s *server) UpdateMacAddressHandler(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-	}
-
-	// Create mac object with properties from bluecat
-	mac := &models.Mac{
-		Address:    params.Address,
-		PoolId:     params.PoolId,
-		Properties: entity.Properties,
-	}
-
-	// Update the mac object with the new properties
-	err = s.services.MacAddressService.UpdateMacAddress(*mac, params.Properties)
-	if err != nil {
-		logger.Error("Failed to update mac address", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
 	}
 
 	// Send the response back to client

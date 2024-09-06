@@ -13,7 +13,7 @@ import (
 type MacAddressEntityService interface {
 	GetMacAddress(macAddress string) (*models.Entity, error)
 	CreateMacAddress(mac models.Mac) (int, error)
-	UpdateMacAddress(mac models.Mac, properties map[string]string) error
+	UpdateMacAddress(newMac models.Mac) error
 }
 
 type MacAddressService struct {
@@ -131,36 +131,36 @@ func (ms *MacAddressService) AssociateMacAddress(mac models.Mac, configId int) e
 	return nil
 }
 
-func (ms *MacAddressService) UpdateMacAddress(mac models.Mac, newProperties map[string]string) error {
-	logger.Info("UpdateMacAddress started", zap.Any("mac", mac), zap.Any("newProperties", newProperties))
+func (ms *MacAddressService) UpdateMacAddress(newMac models.Mac) error {
+	logger.Info("UpdateMacAddress started", zap.Any("New MAC", newMac))
 
 	// Associate mac address with a pool if poolid exists
-	if mac.PoolId != 0 {
+	if newMac.PoolId != 0 {
 		// Get the configuration ID
 		configId, err := GetConfigID(ms.server)
 		if err != nil {
 			return err
 		}
 
-		if err := ms.AssociateMacAddress(mac, configId); err != nil {
+		if err := ms.AssociateMacAddress(newMac, configId); err != nil {
 			return err
 		}
 	}
 
 	// Return early if newProperties is empty
-	if len(newProperties) == 0 {
+	if len(newMac.Properties) == 0 {
 		logger.Info("No new properties to update")
 		return nil
 	}
 
-	// Get the entity by MAC address
-	entity, err := ms.GetMacAddress(mac.Address)
+	// Get the mac object from inside bluecat to retrieve the properties
+	entity, err := ms.GetMacAddress(newMac.Address)
 	if err != nil {
 		return err
 	}
 
 	// Merge new properties into existing entity properties
-	for key, value := range newProperties {
+	for key, value := range newMac.Properties {
 		entity.Properties[key] = value
 	}
 
@@ -170,6 +170,6 @@ func (ms *MacAddressService) UpdateMacAddress(mac models.Mac, newProperties map[
 		return err
 	}
 
-	logger.Info("UpdateMacAddress successful", zap.String("macAddress", mac.Address))
+	logger.Info("UpdateMacAddress successful", zap.String("macAddress", newMac.Address))
 	return nil
 }

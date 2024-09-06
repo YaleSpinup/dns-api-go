@@ -64,5 +64,5 @@ func (s *server) routes() {
 	// Manage MAC addresses
 	accountRouter.HandleFunc("/macs/{mac}", s.GetMacAddressHandler).Methods(http.MethodGet)
 	accountRouter.HandleFunc("/macs", s.CreateMacAddressHandler).Methods(http.MethodPost)
-	accountRouter.HandleFunc("/macs/{mac}", s.CreateMacAddressHandler).Methods(http.MethodPut)
+	accountRouter.HandleFunc("/macs/{mac}", s.UpdateMacAddressHandler).Methods(http.MethodPut)
 }
