@@ -88,6 +88,7 @@ func (s *server) MakeRequest(method, route, queryParam string, body io.Reader) (
 	}
 
 	req.Header.Set("Authorization", token)
+	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
 
 	// Send the HTTP request
 	client := &http.Client{
