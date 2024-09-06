@@ -39,7 +39,7 @@ func (ms *MacAddressService) GetMacAddress(macAddress string) (*models.Entity, e
 
 	// Send http request to bluecat
 	route, params := "/getMACAddress", fmt.Sprintf("configurationId=%d&macAddress=%s", configId, macAddress)
-	resp, err := ms.server.MakeRequest("GET", route, params)
+	resp, err := ms.server.MakeRequest("GET", route, params, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (ms *MacAddressService) AddMacAddress(mac models.Mac, configId int) (int, e
 	route, params := "/addMACAddress", fmt.Sprintf("configurationId=%d&macAddress=%s",
 		configId, mac.Address)
 	params += "&properties=" + common.ConvertToSeparatedString(mac.Properties, "|")
-	resp, err := ms.server.MakeRequest("POST", route, params)
+	resp, err := ms.server.MakeRequest("POST", route, params, nil)
 	if err != nil {
 		return -1, err
 	}
@@ -122,7 +122,7 @@ func (ms *MacAddressService) AssociateMacAddress(mac models.Mac, configId int) e
 	// Send request to bluecat
 	route, params := "/associateMACAddressWithPool", fmt.Sprintf("configurationId=%d&macAddress=%s&poolId=%d",
 		configId, mac.Address, mac.PoolId)
-	resp, err := ms.server.MakeRequest("POST", route, params)
+	resp, err := ms.server.MakeRequest("POST", route, params, nil)
 	if err != nil {
 		return err
 	}
