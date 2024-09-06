@@ -5,6 +5,7 @@ import (
 	"dns-api-go/internal/mocks"
 	"dns-api-go/internal/models"
 	"github.com/pkg/errors"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -90,7 +91,7 @@ func TestGetEntity(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			mockServer := &mocks.MockServer{
-				MakeRequestFunc: func(method, route, queryParam string) ([]byte, error) {
+				MakeRequestFunc: func(method, route, queryParam string, body io.Reader) ([]byte, error) {
 					return tc.mockMakeRequestResponse, tc.mockMakeRequestError
 				},
 			}
@@ -198,7 +199,7 @@ func TestDeleteEntity(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			mockServer := &mocks.MockServer{
-				MakeRequestFunc: func(method, route, queryParam string) ([]byte, error) {
+				MakeRequestFunc: func(method, route, queryParam string, body io.Reader) ([]byte, error) {
 					if strings.Contains(route, "getEntityById") {
 						return tc.mockMakeReqGetEntResp, tc.mockMakeReqGetEntError
 					} else if strings.Contains(route, "delete") {
@@ -315,7 +316,7 @@ func TestGetEntities(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			mockServer := &mocks.MockServer{
-				MakeRequestFunc: func(method, route, queryParam string) ([]byte, error) {
+				MakeRequestFunc: func(method, route, queryParam string, body io.Reader) ([]byte, error) {
 					return tc.mockMakeRequestResponse, tc.mockMakeRequestError
 				},
 			}
@@ -383,7 +384,7 @@ func TestUpdateEntity(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			mockServer := &mocks.MockServer{
-				MakeRequestFunc: func(method, route, queryParam string) ([]byte, error) {
+				MakeRequestFunc: func(method, route, queryParam string, body io.Reader) ([]byte, error) {
 					return nil, tc.mockMakeRequestError
 				},
 			}

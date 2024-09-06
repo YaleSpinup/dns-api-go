@@ -38,7 +38,7 @@ func (s *server) VersionHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
-	body, err := s.MakeRequest("GET", "/getSystemInfo", "")
+	body, err := s.MakeRequest("GET", "/getSystemInfo", "", nil)
 	if err != nil {
 		logger.Error("Failed to retrieve system info",
 			zap.Error(err))
@@ -88,7 +88,7 @@ func (s *server) GetRecordHintHandler(w http.ResponseWriter, r *http.Request) {
 	queryParam := fmt.Sprintf("count=%s&options=%s&start=%s", count, options, start)
 
 	// Make the API request
-	body, err := s.MakeRequest("GET", endpoint, queryParam)
+	body, err := s.MakeRequest("GET", endpoint, queryParam, nil)
 	if err != nil {
 		logger.Error("Failed to make API request for record hint",
 			zap.String("endpoint", endpoint),

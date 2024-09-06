@@ -32,7 +32,7 @@ func (es *BaseService) GetEntity(id int, includeHA bool) (*models.Entity, error)
 
 	// Send http request to bluecat
 	route, params := "/getEntityById", fmt.Sprintf("id=%d&includeHA=%t", id, includeHA)
-	resp, err := es.server.MakeRequest("GET", route, params)
+	resp, err := es.server.MakeRequest("GET", route, params, nil)
 
 	// Check for errors when sending request
 	if err != nil {
@@ -107,7 +107,7 @@ func (es *BaseService) DeleteEntity(id int, expectedTypes []string) error {
 
 	// Send http request to bluecat
 	route, params := "/delete", fmt.Sprintf("objectId=%d", id)
-	_, err = es.server.MakeRequest("DELETE", route, params)
+	_, err = es.server.MakeRequest("DELETE", route, params, nil)
 
 	// Check for errors while sending request
 	if err != nil {
@@ -133,7 +133,7 @@ func (es *BaseService) GetEntities(start int, count int, parentId int, entityTyp
 	route := "/getEntities"
 	params := fmt.Sprintf("start=%d&count=%d&parentId=%d&type=%s&includeHA=%t",
 		start, count, parentId, entityType, includeHA)
-	resp, err := es.server.MakeRequest("GET", route, params)
+	resp, err := es.server.MakeRequest("GET", route, params, nil)
 
 	// Check for errors when sending request
 	if err != nil {
@@ -165,7 +165,7 @@ func (es *BaseService) UpdateEntity(entity *models.Entity) error {
 
 	// Send http request to bluecat
 	route, params := "/update", fmt.Sprintf("body=%s", string(bluecatEntityJSON))
-	_, err = es.server.MakeRequest("PUT", route, params)
+	_, err = es.server.MakeRequest("PUT", route, params, nil)
 
 	// Check for errors when sending request
 	if err != nil {

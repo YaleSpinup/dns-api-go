@@ -48,7 +48,7 @@ func GetEntitiesByHintHelper(server interfaces.ServerInterface, route string, st
 	params += "&options=" + common.ConvertToSeparatedString(options, "|")
 
 	// Use the configuration ID to call the Bluecat API to get entities
-	resp, err := server.MakeRequest("GET", route, params)
+	resp, err := server.MakeRequest("GET", route, params, nil)
 	if err != nil {
 		return nil, err
 	}

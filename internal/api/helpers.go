@@ -73,7 +73,7 @@ func (s *server) getToken() (string, error) {
 	return s.bluecat.token, nil
 }
 
-func (s *server) MakeRequest(method, route, queryParam string) ([]byte, error) {
+func (s *server) MakeRequest(method, route, queryParam string, body io.Reader) ([]byte, error) {
 	// Construct the API URL
 	apiURL := s.bluecat.baseUrl + route
 	if queryParam != "" {
@@ -83,7 +83,7 @@ func (s *server) MakeRequest(method, route, queryParam string) ([]byte, error) {
 	logger.Debug("API URL", zap.String("URL", apiURL))
 
 	// Create a new HTTP request
-	req, err := http.NewRequest(strings.ToUpper(method), apiURL, nil)
+	req, err := http.NewRequest(strings.ToUpper(method), apiURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("error creating HTTP request: %v", err)
 	}
@@ -104,7 +104,7 @@ func (s *server) MakeRequest(method, route, queryParam string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	// Read the response body
-	body, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("error reading response body: %v", err)
 	}
@@ -120,17 +120,17 @@ func (s *server) MakeRequest(method, route, queryParam string) ([]byte, error) {
 		s.bluecat.token = ""
 		s.bluecat.tokenLock.Unlock()
 
-		return s.MakeRequest(method, route, queryParam)
+		return s.MakeRequest(method, route, queryParam, body)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Error("Unexpected status code received from API",
 			zap.Int("StatusCode", resp.StatusCode),
-			zap.String("Body", string(body)))
-		return nil, fmt.Errorf("unexpected status code: %d, Body: %s", resp.StatusCode, string(body))
+			zap.String("Body", string(respBody)))
+		return nil, fmt.Errorf("unexpected status code: %d, Body: %s", resp.StatusCode, string(respBody))
 	}
 
-	return body, nil
+	return respBody, nil
 }
 
 // respond writes the response to the client
