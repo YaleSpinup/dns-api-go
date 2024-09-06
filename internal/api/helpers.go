@@ -9,7 +9,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -36,7 +35,7 @@ func (s *server) generateAuthToken(username, password string) (string, error) {
 	defer resp.Body.Close()
 
 	// Read the response body
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Error("Error reading login response body", zap.Error(err))
 		return "", err
