@@ -69,6 +69,14 @@ func (ms *MacAddressService) GetMacAddress(macAddress string) (*models.Entity, e
 func (ms *MacAddressService) CreateMacAddress(mac models.Mac) (int, error) {
 	logger.Info("CreateMacAddress started", zap.Any("mac", mac))
 
+	// Check if the mac address entity already exists
+	_, err := ms.GetMacAddress(mac.Address)
+	if err == nil {
+		// Entity already exists, return custom error
+		logger.Error("MAC address entity already exists", zap.String("macAddress", mac.Address))
+		return -1, &ErrEntityAlreadyExists{EntityID: mac.Address}
+	}
+
 	// Get the configuration ID
 	configId, err := GetConfigID(ms.server)
 	if err != nil {
@@ -124,7 +132,7 @@ func (ms *MacAddressService) AssociateMacAddress(mac models.Mac, configId int) e
 		configId, mac.Address, mac.PoolId)
 	resp, err := ms.server.MakeRequest("POST", route, params, nil)
 	if err != nil {
-		return err
+		return &PoolIDError{PoolID: mac.PoolId, Err: err}
 	}
 
 	logger.Info("Received response for AssociateMacAddress", zap.ByteString("response", resp))

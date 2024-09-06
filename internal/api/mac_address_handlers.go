@@ -160,21 +160,18 @@ func (s *server) CreateMacAddressHandler(w http.ResponseWriter, r *http.Request)
 		Properties: params.Properties,
 	}
 
-	// Check if the mac address entity already exists
-	_, err = s.services.MacAddressService.GetMacAddress(mac.Address)
-	if err == nil {
-		// Entity already exists, return custom error
-		logger.Error("MAC address entity already exists", zap.String("macAddress", mac.Address))
-		existsErr := &services.ErrEntityAlreadyExists{EntityID: mac.Address}
-		http.Error(w, existsErr.Error(), http.StatusConflict)
-		return
-	}
-
 	// Attempt to create the mac address to bluecat and handle potential errors
 	objectId, err := s.services.MacAddressService.CreateMacAddress(*mac)
 	if err != nil {
 		logger.Error("Failed to create mac address", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		switch e := err.(type) {
+		case *services.ErrEntityAlreadyExists:
+			http.Error(w, e.Error(), http.StatusConflict)
+		case *services.PoolIDError:
+			http.Error(w, e.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -207,6 +204,9 @@ func (s *server) UpdateMacAddressHandler(w http.ResponseWriter, r *http.Request)
 		switch e := err.(type) {
 		case *services.ErrEntityNotFound:
 			http.Error(w, e.Error(), http.StatusNotFound)
+			return
+		case *services.PoolIDError:
+			http.Error(w, e.Error(), http.StatusBadRequest)
 			return
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
