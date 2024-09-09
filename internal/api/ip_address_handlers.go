@@ -246,3 +246,15 @@ func (s *server) AssignIpAddressHandler(w http.ResponseWriter, r *http.Request) 
 	// Successfully assigned ip address; sending back to client
 	s.respond(w, entityWithIP, http.StatusOK)
 }
+
+// GetCIDRHandler retrieves the CIDR file from the server
+func (s *server) GetCIDRHandler(w http.ResponseWriter, r *http.Request) {
+	contents, err := s.GetCIDRFile()
+	if err != nil {
+		logger.Error("Error getting CIDR file", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.respond(w, contents, http.StatusOK)
+}
