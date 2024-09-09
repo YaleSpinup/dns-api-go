@@ -57,9 +57,10 @@ func (s *server) routes() {
 	accountRouter.HandleFunc("/networks/{id}", s.GetNetworkHandler()).Methods(http.MethodGet)
 
 	// Manage IP addresses
-	api.HandleFunc("/{account}/ips", s.ProxyRequestHandler).Methods(http.MethodPost)
-	api.HandleFunc("/{account}/ips/{ip}", s.ProxyRequestHandler).Methods(http.MethodGet, http.MethodPut, http.MethodDelete)
-	api.HandleFunc("/{account}/ips/cidrs", s.ProxyRequestHandler).Methods(http.MethodGet)
+	accountRouter.HandleFunc("/ips/{ip}", s.GetIpAddressHandler).Methods(http.MethodGet)
+	accountRouter.HandleFunc("/ips/{ip}", s.DeleteIpAddressHandler).Methods(http.MethodDelete)
+	accountRouter.HandleFunc("/ips", s.AssignIpAddressHandler).Methods(http.MethodPost)
+	accountRouter.HandleFunc("/ips/cidrs", s.GetCIDRHandler).Methods(http.MethodGet)
 
 	// Manage MAC addresses
 	accountRouter.HandleFunc("/macs/{mac}", s.GetMacAddressHandler).Methods(http.MethodGet)
