@@ -33,6 +33,7 @@ type Config struct {
 	LogLevel      string
 	Version       Version
 	Org           string
+	CIDRFile      string
 }
 
 type ProxyBackend struct {

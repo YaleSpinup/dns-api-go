@@ -67,6 +67,7 @@ type Services struct {
 	ZoneService *services.ZoneService
 	NetworkService *services.NetworkService
 	MacAddressService *services.MacAddressService
+	IpAddressService *services.IpAddressService
 }
 
 type server struct {
@@ -117,11 +118,13 @@ func NewServer(config common.Config) error {
 	zoneService := services.NewZoneService(&s)
 	networkService := services.NewNetworkService(&s)
 	macAddressService := services.NewMacAddressService(&s)
+	ipAddressService := services.NewIpAddressService(&s, baseService)
 	s.services = Services{
 		BaseService: baseService,
 		ZoneService: zoneService,
 		NetworkService: networkService,
 		MacAddressService: macAddressService,
+		IpAddressService: ipAddressService,
 	}
 
 	if b := config.ProxyBackend; b != nil {
