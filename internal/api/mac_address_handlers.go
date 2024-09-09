@@ -66,9 +66,6 @@ func parseCreateMacParams(r *http.Request) (*MacParams, error) {
 	}
 
 	// Validate the presence and format of the mac address
-	if MacParams.Address == "" {
-		return nil, fmt.Errorf("missing required parameter: mac")
-	}
 	if err := validateMacAddress(MacParams.Address); err != nil {
 		return nil, err
 	}
