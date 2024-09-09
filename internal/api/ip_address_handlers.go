@@ -248,7 +248,7 @@ func (s *server) AssignIpAddressHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 // GetCIDRHandler retrieves the CIDR file from the server
-func (s *server) GetCIDRHandler(w http.ResponseWriter, r *http.Request) {
+func (s *server) GetCIDRHandler(w http.ResponseWriter, _ *http.Request) {
 	contents, err := s.GetCIDRFile()
 	if err != nil {
 		logger.Error("Error getting CIDR file", zap.Error(err))
