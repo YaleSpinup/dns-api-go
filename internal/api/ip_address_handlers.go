@@ -28,11 +28,11 @@ type AssignIpAddressParams struct {
 func parseIpAddressParams(r *http.Request) (*IpAddressParams, error) {
 	// Extract address parameter from the request URL
 	vars := mux.Vars(r)
-	address, addressOk := vars["address"]
+	address, addressOk := vars["ip"]
 
 	// Validate the presence of the required 'address' parameter
 	if !addressOk {
-		return nil, fmt.Errorf("missing required parameter: id")
+		return nil, fmt.Errorf("missing required parameter: address")
 	}
 
 	return &IpAddressParams{
@@ -132,6 +132,8 @@ func incrementIP(ip net.IP) {
 
 // GetIpAddressHandler retrieves an ip address entity from the database
 func (s *server) GetIpAddressHandler(w http.ResponseWriter, r *http.Request) {
+	logger.Info("GetIpAddressHandler started")
+
 	// Parse the ip address parameter from the request
 	params, err := parseIpAddressParams(r)
 	if err != nil {
@@ -164,6 +166,8 @@ func (s *server) GetIpAddressHandler(w http.ResponseWriter, r *http.Request) {
 
 // DeleteIpAddressHandler deletes an ip address entity from the bluecat
 func (s *server) DeleteIpAddressHandler(w http.ResponseWriter, r *http.Request) {
+	logger.Info("DeleteIpAddressHandler started")
+
 	// Parse the entity parameters from the request
 	params, err := parseIpAddressParams(r)
 	if err != nil {
@@ -197,6 +201,8 @@ func (s *server) DeleteIpAddressHandler(w http.ResponseWriter, r *http.Request) 
 
 // AssignIpAddressHandler assigns the next available ipv4 address to a host in bluecat
 func (s *server) AssignIpAddressHandler(w http.ResponseWriter, r *http.Request) {
+	logger.Info("AssignIpAddressHandler started")
+
 	// Parse the body from the request
 	body, err := parseAssignIpAddressBody(s, s.services.IpAddressService, r)
 	if err != nil {
@@ -249,6 +255,8 @@ func (s *server) AssignIpAddressHandler(w http.ResponseWriter, r *http.Request) 
 
 // GetCIDRHandler retrieves the CIDR file from the server
 func (s *server) GetCIDRHandler(w http.ResponseWriter, _ *http.Request) {
+	logger.Info("GetCIDRHandler started")
+
 	contents, err := s.GetCIDRFile()
 	if err != nil {
 		logger.Error("Error getting CIDR file", zap.Error(err))

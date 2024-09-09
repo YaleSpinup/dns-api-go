@@ -57,10 +57,10 @@ func (s *server) routes() {
 	accountRouter.HandleFunc("/networks/{id}", s.GetNetworkHandler()).Methods(http.MethodGet)
 
 	// Manage IP addresses
+	accountRouter.HandleFunc("/ips/cidrs", s.GetCIDRHandler).Methods(http.MethodGet)
 	accountRouter.HandleFunc("/ips/{ip}", s.GetIpAddressHandler).Methods(http.MethodGet)
 	accountRouter.HandleFunc("/ips/{ip}", s.DeleteIpAddressHandler).Methods(http.MethodDelete)
 	accountRouter.HandleFunc("/ips", s.AssignIpAddressHandler).Methods(http.MethodPost)
-	accountRouter.HandleFunc("/ips/cidrs", s.GetCIDRHandler).Methods(http.MethodGet)
 
 	// Manage MAC addresses
 	accountRouter.HandleFunc("/macs/{mac}", s.GetMacAddressHandler).Methods(http.MethodGet)
