@@ -15,7 +15,6 @@ type IpAddressEntityService interface {
 	GetIpAddress(address string) (*models.Entity, error)
 	DeleteIpAddress(address string) error
 	AssignIpAddress(action string, macAddress string, parentId int, hostInfo map[string]string, properties map[string]string) (*models.Entity, error)
-	GetCIDRs() (string, error)
 }
 
 type IpAddressService struct {

@@ -33,6 +33,7 @@ var testConfig = []byte(
 			"password": "test",
 			"viewId": "01234"
 		},
+		"cidrFile": "common/cidr.json",
 		"token": "SEKRET",
 		"logLevel": "info",
 		"org": "test"
@@ -61,6 +62,7 @@ func TestReadConfig(t *testing.T) {
 			Password: "test",
 			ViewId:   "01234",
 		},
+		CIDRFile: "common/cidr.json",
 		Token:    "SEKRET",
 		LogLevel: "info",
 		Org:      "test",
