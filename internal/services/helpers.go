@@ -29,6 +29,38 @@ func GetConfigID(server interfaces.ServerInterface) (int, error) {
 	return configId, nil
 }
 
+// GetParentID retrieves the parent ID of an entity from Bluecat.
+func GetParentID(server interfaces.ServerInterface, entityId int) (int, error) {
+	logger.Info("GetParentID started", zap.Int("entityId", entityId))
+
+	// Send http request to bluecat
+	route, params := "/getParent", fmt.Sprintf("entityId=%d", entityId)
+	resp, err := server.MakeRequest("GET", route, params, nil)
+	if err != nil {
+		logger.Error("Error getting parent ID", zap.Error(err), zap.Int("entityId", entityId))
+		return -1, err
+	}
+
+	// Unmarshal the response
+	var bluecatEntity models.BluecatEntity
+	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
+		logger.Error("Error unmarshalling entity response", zap.Error(err))
+		return -1, err
+	}
+
+	// Check if the response represents an empty entity
+	if bluecatEntity.IsEmpty() {
+		logger.Info("Entity not found", zap.Int("entity id", entityId))
+		return -1, &ErrEntityNotFound{}
+	}
+
+	// Convert BluecatEntity to Entity
+	parentEntity := bluecatEntity.ToEntity()
+
+	logger.Info("GetParentID successful", zap.Int("parentId", parentEntity.ID))
+	return parentEntity.ID, nil
+}
+
 // GetEntitiesByHintHelper retrieves entities by hint, given a specific route.
 // Many of the entity retrieval functions in across the different services use this helper function because they share the same logic
 func GetEntitiesByHintHelper(server interfaces.ServerInterface, route string, start int, count int, options map[string]string) (*[]models.Entity, error) {
