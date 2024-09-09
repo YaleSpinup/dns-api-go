@@ -21,6 +21,7 @@ import (
 	"dns-api-go/internal/common"
 	"dns-api-go/internal/services"
 	"dns-api-go/logger"
+	"encoding/json"
 	"errors"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -78,6 +79,7 @@ type server struct {
 	bluecat  *bluecat
 	org      string
 	services Services
+	cidrFile string
 }
 
 // NewServer creates a new server and starts it
@@ -112,6 +114,9 @@ func NewServer(config common.Config) error {
 			viewId:   b.ViewId,
 		}
 	}
+
+	// Set CIDR file
+	s.cidrFile = config.CIDRFile
 
 	// Define services that interact with Bluecat entities
 	baseService := services.NewBaseService(&s)
@@ -243,4 +248,32 @@ func retry(attempts int, doubling int, sleep time.Duration, f func() error) erro
 	}
 
 	return nil
+}
+
+// GetCIDRFile returns the contents of the CIDR file
+func (s *server) GetCIDRFile() (string, error) {
+	// Check if the CIDR file is empty
+	if s.cidrFile == "" {
+		return "", &CIDRFileNotFound{}
+	}
+
+	// Read the contents of the CIDR file
+	content, err := os.ReadFile(s.cidrFile)
+	if err != nil {
+		return "", err
+	}
+
+	// Unmarshal the JSON content into a Go data structure
+	var data interface{}
+	if err := json.Unmarshal(content, &data); err != nil {
+		return "", err
+	}
+
+	// Marshal the data structure back to a JSON string
+	jsonContent, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+
+	return string(jsonContent), nil
 }
