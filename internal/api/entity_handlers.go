@@ -23,7 +23,7 @@ func (s *server) DeleteEntityHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Attempt to delete the entity by ID and handle potential errors
-	err = s.services.BaseService.DeleteEntity(params.ID, []string{})
+	err = s.services.BaseService.DeleteEntity(params.ID)
 	if err != nil {
 		// Log the error and respond with appropriate HTTP status
 		logger.Error("Error deleting entity by ID",
