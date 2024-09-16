@@ -131,6 +131,8 @@ func (s *server) HandleGetEntityReq(service interfaces.EntityGetter) http.Handle
 			case *services.ErrEntityNotFound:
 				http.Error(w, e.Error(), http.StatusNotFound)
 				return
+			case *services.ErrEntityTypeMismatch:
+				http.Error(w, e.Error(), http.StatusBadRequest)
 			default:
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -139,6 +141,45 @@ func (s *server) HandleGetEntityReq(service interfaces.EntityGetter) http.Handle
 
 		// Successfully retrieved entity; sending back to client
 		s.respond(w, entity, http.StatusOK)
+	}
+}
+
+func (s *server) HandleDeleteEntityReq(service interfaces.EntityDeleter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Parse the entity parameters from the request
+		params, err := parseEntityParams(r)
+		if err != nil {
+			logger.Warn("Invalid request parameters", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Attempt to delete the entity and handle potential errors
+		err = service.DeleteEntity(params.ID)
+		if err != nil {
+			// Log the error and respond with appropriate HTTP status
+			logger.Error("Error deleting entity by ID",
+				zap.Int("id", params.ID),
+				zap.String("method", r.Method),
+				zap.Error(err))
+
+			// Determine the type of error and set the HTTP response accordingly
+			switch e := err.(type) {
+			case *services.ErrDeleteNotAllowed:
+				http.Error(w, e.Error(), http.StatusForbidden)
+				return
+			case *services.ErrEntityNotFound:
+				http.Error(w, e.Error(), http.StatusNotFound)
+			case *services.ErrEntityTypeMismatch:
+				http.Error(w, e.Error(), http.StatusBadRequest)
+			default:
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		// Successfully deleted entity; sending back to client
+		s.respond(w, nil, http.StatusNoContent)
 	}
 }
 

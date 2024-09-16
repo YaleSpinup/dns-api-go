@@ -42,7 +42,7 @@ func (s *server) routes() {
 
 	// Manage entities by ID
 	accountRouter.HandleFunc("/id/{id}", s.GetEntityHandler()).Methods(http.MethodGet)
-	accountRouter.HandleFunc("/id/{id}", s.DeleteEntityHandler).Methods(http.MethodDelete)
+	accountRouter.HandleFunc("/id/{id}", s.DeleteEntityHandler()).Methods(http.MethodDelete)
 
 	// Manage Zones
 	api.HandleFunc("/{account}/zones", s.ProxyRequestHandler).Methods(http.MethodGet)
