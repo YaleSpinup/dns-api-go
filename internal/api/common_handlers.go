@@ -165,5 +165,4 @@ func (s *server) HandleGetEntitiesByHintReq(service interfaces.EntitiesByHintLis
 		// Set the response headers and write the JSON response
 		s.respond(w, entities, http.StatusOK)
 	}
-
 }
