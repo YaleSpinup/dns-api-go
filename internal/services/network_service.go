@@ -15,12 +15,11 @@ type NetworkEntityService interface {
 
 type NetworkService struct {
 	server interfaces.ServerInterface
-	interfaces.EntityGetter
 }
 
 // NewNetworkService Constructor for NetworkService
-func NewNetworkService(server interfaces.ServerInterface, entityGetter interfaces.EntityGetter) *NetworkService {
-	return &NetworkService{server: server, EntityGetter: entityGetter}
+func NewNetworkService(server interfaces.ServerInterface) *NetworkService {
+	return &NetworkService{server: server}
 }
 
 // GetEntitiesByHint Retrieves a list of networks from bluecat
@@ -45,14 +44,9 @@ func (ns *NetworkService) GetEntity(networkId int, includeHA bool) (*models.Enti
 	logger.Info("GetNetwork started", zap.Int("networkId", networkId))
 
 	// Call EntityGetter
-	entity, err := ns.EntityGetter.GetEntity(networkId, includeHA)
+	entity, err := GetEntityByID(ns.server, networkId, includeHA, []string{types.NETWORK})
 	if err != nil {
 		return nil, err
-	}
-
-	// Check if the entity type is a network
-	if entity.Type != types.NETWORK {
-		return nil, &ErrEntityTypeMismatch{ExpectedTypes: []string{types.NETWORK}, ActualType: entity.Type}
 	}
 
 	logger.Info("GetNetwork successful",
