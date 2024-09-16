@@ -9,18 +9,17 @@ import (
 )
 
 type ZoneEntityService interface {
-	GetZones(start int, count int, options map[string]string) (*[]models.Entity, error)
+	GetEntitiesByHint(start int, count int, options map[string]string) (*[]models.Entity, error)
 	GetEntity(zoneId int, includeHA bool) (*models.Entity, error)
 }
 
 type ZoneService struct {
 	server interfaces.ServerInterface
-	interfaces.EntityGetter
 }
 
 // NewZoneService Constructor for ZoneService
-func NewZoneService(server interfaces.ServerInterface, entityGetter interfaces.EntityGetter) *ZoneService {
-	return &ZoneService{server: server, EntityGetter: entityGetter}
+func NewZoneService(server interfaces.ServerInterface) *ZoneService {
+	return &ZoneService{server: server}
 }
 
 // GetEntitiesByHint Retrieves zones from bluecat
@@ -45,14 +44,9 @@ func (zs *ZoneService) GetEntity(zoneId int, includeHA bool) (*models.Entity, er
 	logger.Info("GetZone started", zap.Int("zoneId", zoneId))
 
 	// Call EntityGetter
-	entity, err := zs.EntityGetter.GetEntity(zoneId, includeHA)
+	entity, err := GetEntityByID(zs.server, zoneId, includeHA, []string{types.ZONE})
 	if err != nil {
 		return nil, err
-	}
-
-	// Check if the entity type is a zone
-	if entity.Type != types.ZONE {
-		return nil, &ErrEntityTypeMismatch{ExpectedTypes: []string{types.ZONE}, ActualType: entity.Type}
 	}
 
 	logger.Info("GetZone successful",
