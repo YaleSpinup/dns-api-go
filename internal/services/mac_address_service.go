@@ -18,13 +18,11 @@ type MacAddressEntityService interface {
 
 type MacAddressService struct {
 	server interfaces.ServerInterface
-	interfaces.EntityGetter
-	interfaces.EntityUpdater
 }
 
 // NewMacAddressService Constructor for MacAddressService
-func NewMacAddressService(server interfaces.ServerInterface, entityGetter interfaces.EntityGetter, entityUpater interfaces.EntityUpdater) *MacAddressService {
-	return &MacAddressService{server: server, EntityGetter: entityGetter, EntityUpdater: entityUpater}
+func NewMacAddressService(server interfaces.ServerInterface) *MacAddressService {
+	return &MacAddressService{server: server}
 }
 
 // GetMacAddress Retrieves a mac address entity from bluecat
@@ -173,7 +171,7 @@ func (ms *MacAddressService) UpdateMacAddress(newMac models.Mac) error {
 	}
 
 	// Update entity in bluecat
-	err = ms.EntityUpdater.UpdateEntity(entity)
+	err = UpdateEntity(ms.server, entity)
 	if err != nil {
 		return err
 	}

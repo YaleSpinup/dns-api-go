@@ -116,7 +116,7 @@ func NewServer(config common.Config) error {
 	baseService := services.NewBaseService(&s)
 	zoneService := services.NewZoneService(&s)
 	networkService := services.NewNetworkService(&s)
-	macAddressService := services.NewMacAddressService(&s, baseService, baseService)
+	macAddressService := services.NewMacAddressService(&s)
 	s.services = Services{
 		BaseService: baseService,
 		ZoneService: zoneService,
