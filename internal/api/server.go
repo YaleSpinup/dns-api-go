@@ -123,7 +123,7 @@ func NewServer(config common.Config) error {
 	zoneService := services.NewZoneService(&s)
 	networkService := services.NewNetworkService(&s)
 	macAddressService := services.NewMacAddressService(&s)
-	ipAddressService := services.NewIpAddressService(&s, baseService)
+	ipAddressService := services.NewIpAddressService(&s)
 	s.services = Services{
 		BaseService: baseService,
 		ZoneService: zoneService,

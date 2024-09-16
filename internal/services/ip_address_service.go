@@ -18,13 +18,12 @@ type IpAddressEntityService interface {
 }
 
 type IpAddressService struct {
-	server        interfaces.ServerInterface
-	EntityDeleter interfaces.EntityDeleter
+	server interfaces.ServerInterface
 }
 
 // NewIpAddressService creates a new IpAddressService
-func NewIpAddressService(server interfaces.ServerInterface, entityDeleter interfaces.EntityDeleter) *IpAddressService {
-	return &IpAddressService{server: server, EntityDeleter: entityDeleter}
+func NewIpAddressService(server interfaces.ServerInterface) *IpAddressService {
+	return &IpAddressService{server: server}
 }
 
 // GetIpAddress gets an ip entity from bluecat based on the ip address
@@ -77,7 +76,7 @@ func (ips *IpAddressService) DeleteIpAddress(address string) error {
 	logger.Info("Found ip address", zap.String("address", address), zap.Int("id", entity.ID))
 
 	// Delete the ip address
-	err = ips.EntityDeleter.DeleteEntity(entity.ID, []string{types.IP4ADDRESS})
+	err = DeleteEntityByID(ips.server, entity.ID, []string{types.IP4ADDRESS})
 	if err != nil {
 		return err
 	}

@@ -197,6 +197,11 @@ func (s *server) DeleteIpAddressHandler(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
+
+	// Successfully deleted ip address; sending back to client
+	logger.Info("DeleteIpAddressHandler completed")
+	s.respond(w, nil, http.StatusNoContent)
+
 }
 
 // AssignIpAddressHandler assigns the next available ipv4 address to a host in bluecat
