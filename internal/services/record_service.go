@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
+	"strings"
 )
 
 type RecordEntityService interface {
@@ -192,10 +193,29 @@ func (rs *RecordService) CreateRecord(recordType string, parameters map[string]i
 		return nil, fmt.Errorf("invalid record type")
 	}
 
+	// Check if record already exists in bluecat
+	checkRecordParams := map[string]interface{}{
+		"name":    parameters["name"],
+		"count":   10,
+		"start":   0,
+		"options": map[string]string{"hint": parameters["name"].(string)},
+	}
+	entities, err := rs.GetRecordsByType(recordType, checkRecordParams, viewId)
+	if err == nil && len(*entities) > 0 {
+		entity := (*entities)[0]
+		// If the record name retrieved matches the record name trying to be created
+		if entity.Name == parameters["name"].(string) {
+			// Entity already exists, return custom error
+			logger.Error("Record already exists", zap.String("recordType", recordType))
+			return nil, &ErrEntityAlreadyExists{EntityID: entity.Name}
+		}
+	}
+
 	// Send request to bluecat
 	params := common.ConvertToSeparatedString(paramsMap, "&")
 	resp, err := rs.server.MakeRequest("POST", route, params, nil)
 	if err != nil {
+		logger.Info("Error code", zap.Error(err))
 		return nil, err
 	}
 
@@ -221,7 +241,7 @@ func prepCreateHostParams(parameters map[string]interface{}, viewId int) (string
 	if !ok {
 		return "", nil, fmt.Errorf("invalid type for absoluteName")
 	}
-	addresses, ok := parameters["addresses"].(map[string]string)
+	addresses, ok := parameters["addresses"].([]string)
 	if !ok {
 		return "", nil, fmt.Errorf("invalid type for addresses")
 	}
@@ -238,7 +258,7 @@ func prepCreateHostParams(parameters map[string]interface{}, viewId int) (string
 	route := "/addHostRecord"
 	paramsMap := map[string]string{
 		"absoluteName": absoluteName,
-		"addresses":    common.ConvertToSeparatedString(addresses, ","),
+		"addresses":    strings.Join(addresses, ","),
 		"properties":   common.ConvertToSeparatedString(properties, "|"),
 		"ttl":          fmt.Sprintf("%d", ttl),
 		"viewId":       fmt.Sprintf("%d", viewId),

@@ -2,12 +2,14 @@ package api
 
 import (
 	"dns-api-go/internal/common"
+	"dns-api-go/internal/services"
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 type GetRecordsByTypeParams struct {
@@ -169,8 +171,15 @@ func (s *server) GetRecordsHandler(w http.ResponseWriter, r *http.Request) {
 	entities, err := s.services.RecordService.GetRecordsByType(params.recordType, paramMap, viewId)
 	if err != nil {
 		logger.Error("Error getting records", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		// Determine the type of error and set the HTTP response accordingly
+		switch e := err.(type) {
+		case *services.ErrEntityNotFound:
+			http.Error(w, e.Error(), http.StatusNotFound)
+			return
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	logger.Info("GetRecordsHandler successful")
@@ -187,8 +196,8 @@ func (s *server) CreateRecordHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	// Convert target and properties into a map
-	targetMap := common.ConvertToMap(params.Target, ",")
+	// Derive addresses from target and convert properties into a map
+	addresses := strings.Split(params.Target, ",")
 	propertiesMap := common.ConvertToMap(params.Properties, "|")
 
 	// Get the view id
@@ -205,7 +214,7 @@ func (s *server) CreateRecordHandler(w http.ResponseWriter, r *http.Request) {
 		"absoluteName":     params.RecordName,
 		"linkedRecordName": params.Target,
 		"name":             params.RecordName,
-		"addresses":        targetMap,
+		"addresses":        addresses,
 		"properties":       propertiesMap,
 		"ttl":              params.Ttl,
 	}
@@ -213,8 +222,15 @@ func (s *server) CreateRecordHandler(w http.ResponseWriter, r *http.Request) {
 	entity, err := s.services.RecordService.CreateRecord(params.RecordType, paramMap, viewId)
 	if err != nil {
 		logger.Error("Error creating record", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		// Determine the type of error and set the HTTP response accordingly
+		switch e := err.(type) {
+		case *services.ErrEntityAlreadyExists:
+			http.Error(w, e.Error(), http.StatusConflict)
+			return
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	logger.Info("CreateRecordHandler successful")
