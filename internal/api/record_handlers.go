@@ -161,7 +161,13 @@ func (s *server) GetRecordsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the view id
-	viewId := s.bluecat.viewId
+	viewIdStr := s.bluecat.viewId
+	viewId, err := strconv.Atoi(viewIdStr)
+	if err != nil {
+		logger.Error("Error converting viewId to int", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	entities, err := s.services.RecordService.GetRecordsByType(params.recordType, paramMap, viewId)
 	if err != nil {
@@ -189,7 +195,13 @@ func (s *server) CreateRecordHandler(w http.ResponseWriter, r *http.Request) {
 	propertiesMap := common.ConvertToMap(params.Properties, "|")
 
 	// Get the view id
-	viewId := s.bluecat.viewId
+	viewIdStr := s.bluecat.viewId
+	viewId, err := strconv.Atoi(viewIdStr)
+	if err != nil {
+		logger.Error("Error converting viewId to int", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	// Create a map of parameters to pass to the service
 	paramMap := map[string]interface{}{
