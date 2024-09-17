@@ -95,13 +95,20 @@ func parentIdFromCidr(s *server, ipAddressService services.IpAddressEntityServic
 		return -1, fmt.Errorf("invalid CIDR format: %v", err)
 	}
 
+	counter := 0
 	// Enumerate the first 10 IP addresses in the CIDR range
 	for ip := ipNet.IP.Mask(ipNet.Mask); ipNet.Contains(ip); incrementIP(ip) {
+		// Only try a max of 10 addresses
+		if counter >= 10 {
+			break
+		}
+
 		logger.Info("Trying to use IP address as canary", zap.String("ip", ip.String()))
 
 		// Get the IP address entity from the database
 		ipAddressEntity, err := ipAddressService.GetIpAddress(ip.String())
 		if err != nil {
+			counter++
 			continue
 		}
 
@@ -110,6 +117,8 @@ func parentIdFromCidr(s *server, ipAddressService services.IpAddressEntityServic
 		if err == nil {
 			return parentID, nil
 		}
+
+		counter++
 	}
 
 	// No parent ID found in the CIDR range
