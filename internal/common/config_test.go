@@ -30,7 +30,8 @@ var testConfig = []byte(
 			"account": "test",
 			"baseUrl": "https://bluecat.example.com",
 			"username": "test",
-			"password": "test"
+			"password": "test",
+			"viewId": "01234"
 		},
 		"token": "SEKRET",
 		"logLevel": "info",
@@ -58,6 +59,7 @@ func TestReadConfig(t *testing.T) {
 			BaseUrl:  "https://bluecat.example.com",
 			Username: "test",
 			Password: "test",
+			ViewId:   "01234",
 		},
 		Token:    "SEKRET",
 		LogLevel: "info",

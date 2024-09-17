@@ -46,6 +46,7 @@ type Bluecat struct {
 	BaseUrl  string
 	Username string
 	Password string
+	ViewId   string
 }
 
 // Version carries around the API version information

@@ -59,6 +59,7 @@ type bluecat struct {
 	password  string
 	token     string
 	tokenLock sync.Mutex
+	viewId    string
 }
 
 type Services struct {
@@ -104,6 +105,7 @@ func NewServer(config common.Config) error {
 			baseUrl:  b.BaseUrl,
 			user:     b.Username,
 			password: b.Password,
+			viewId:   b.ViewId,
 		}
 	}
 
