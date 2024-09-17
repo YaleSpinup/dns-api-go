@@ -200,14 +200,28 @@ func (rs *RecordService) CreateRecord(recordType string, parameters map[string]i
 		"start":   0,
 		"options": map[string]string{"hint": parameters["name"].(string)},
 	}
+	// Check if any entities are returned from the search. If there are, check if the first entity's name
+	// matches the name of the record being created.
 	entities, err := rs.GetRecordsByType(recordType, checkRecordParams, viewId)
+	logger.Info("Entities", zap.Any("entities", entities))
 	if err == nil && len(*entities) > 0 {
 		entity := (*entities)[0]
-		// If the record name retrieved matches the record name trying to be created
-		if entity.Name == parameters["name"].(string) {
-			// Entity already exists, return custom error
-			logger.Error("Record already exists", zap.String("recordType", recordType))
-			return nil, &ErrEntityAlreadyExists{EntityID: entity.Name}
+		// For host/alias records, the absolute name must be retrieved from the properties field of the first entity
+		// and checked to see if it matches the "name" parameter that is passed in.
+		if recordType == types.HOSTRECORD || recordType == types.CNAMERECORD {
+			absoluteName, ok := entity.Properties["absoluteName"]
+			if ok && absoluteName == parameters["name"].(string) {
+				// Entity already exists, return custom error
+				logger.Error("Record already exists", zap.String("recordType", recordType))
+				return nil, &ErrEntityAlreadyExists{EntityID: entity.Name}
+			}
+		} else {
+			// For external records, the name parameter is the name of the record, so we can directly compare it with the entity name.
+			if entity.Name == parameters["name"].(string) {
+				// Entity already exists, return custom error
+				logger.Error("Record already exists", zap.String("recordType", recordType))
+				return nil, &ErrEntityAlreadyExists{EntityID: entity.Name}
+			}
 		}
 	}
 
