@@ -5,7 +5,6 @@ import (
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	"net/http"
 	"strconv"
@@ -48,15 +47,13 @@ func parseGetRecordsByTypeParams(r *http.Request) (*GetRecordsByTypeParams, erro
 
 	query := r.URL.Query()
 
-	// Extract the record type parameter from the request URL
-	vars := mux.Vars(r)
-	recordType, recordTypeOk := vars["recordType"]
-	// Validate the presence of the required 'recordType' parameter
-	if !recordTypeOk {
-		return nil, fmt.Errorf("missing required parameter: recordType")
+	// Parse record type from the request URL
+	recordType := query.Get("type")
+	if recordType == "" {
+		return nil, fmt.Errorf("missing required parameter: type")
 	}
 	// Make sure record type of either HostRecord, AliasRecord, or ExternalHostRecord
-	if common.Contains([]string{"HostRecord", "AliasRecord", "ExternalHostRecord"}, recordType) == false {
+	if !common.Contains([]string{"HostRecord", "AliasRecord", "ExternalHostRecord"}, recordType) {
 		return nil, fmt.Errorf("invalid record type")
 	}
 	Params.recordType = recordType
