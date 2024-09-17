@@ -1,6 +1,7 @@
 package api
 
 import (
+	"dns-api-go/internal/common"
 	"dns-api-go/internal/services"
 	"dns-api-go/logger"
 	"encoding/json"
@@ -16,12 +17,12 @@ type IpAddressParams struct {
 }
 
 type AssignIpAddressParams struct {
-	MacAddress  string            `json:"mac"`
-	ParentId    int               `json:"network_id"`
-	Hostname    string            `json:"hostname"`
-	ReverseFlag string            `json:"reverse"`
-	CIDR        string            `json:"cidr"`
-	Properties  map[string]string `json:"properties"`
+	MacAddress  string `json:"mac"`
+	ParentId    int    `json:"network_id"`
+	Hostname    string `json:"hostname"`
+	ReverseFlag string `json:"reverse"`
+	CIDR        string `json:"cidr"`
+	Properties  string `json:"properties"`
 }
 
 // parseIpAddressParams parses and validates the parameters from the request.
@@ -77,11 +78,6 @@ func parseAssignIpAddressBody(s *server, ipAddressService services.IpAddressEnti
 	// ReverseFlag must be true or false
 	if AssignIpAddressParams.ReverseFlag != "true" && AssignIpAddressParams.ReverseFlag != "false" {
 		return nil, fmt.Errorf("reverse flag must be true or false")
-	}
-
-	// Initialize Properties if nil
-	if AssignIpAddressParams.Properties == nil {
-		AssignIpAddressParams.Properties = make(map[string]string)
 	}
 
 	return &AssignIpAddressParams, nil
@@ -224,12 +220,13 @@ func (s *server) AssignIpAddressHandler(w http.ResponseWriter, r *http.Request) 
 		"sameAsZoneFlag": "false",
 	}
 
-	// Add name property to the properties map
-	body.Properties["name"] = body.Hostname
+	// Convert properties into a map and add "name" property
+	propertiesMap := common.ConvertToMap(body.Properties, "|")
+	propertiesMap["name"] = body.Hostname
 
 	// Assign the ip address and handle potential errors
 	entity, err := s.services.IpAddressService.AssignIpAddress(
-		"MAKE_STATIC", body.MacAddress, body.ParentId, hostInfo, body.Properties)
+		"MAKE_STATIC", body.MacAddress, body.ParentId, hostInfo, propertiesMap)
 	if err != nil {
 		logger.Error("Error assigning ip address", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
