@@ -133,6 +133,7 @@ func (s *server) HandleGetEntityReq(service interfaces.EntityGetter) http.Handle
 				return
 			case *services.ErrEntityTypeMismatch:
 				http.Error(w, e.Error(), http.StatusBadRequest)
+				return
 			default:
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
