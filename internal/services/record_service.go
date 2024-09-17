@@ -13,34 +13,27 @@ import (
 
 type RecordEntityService interface {
 	GetEntity(recordId int, includeHA bool) (*models.Entity, error)
-	GetRecordByType(recordType string, parameters map[string]interface{}) (*[]models.Entity, error)
+	GetRecordsByType(recordType string, parameters map[string]interface{}, viewId int) (*[]models.Entity, error)
 	CreateRecord(recordType string, parameters map[string]interface{}, viewId int) (*models.Entity, error)
 	DeleteEntity(recordId int) error
 }
 
 type RecordService struct {
 	server interfaces.ServerInterface
-	interfaces.EntityGetter
-	interfaces.EntityDeleter
 }
 
 // NewRecordService Constructor for RecordService
-func (rs *RecordService) NewRecordService(server interfaces.ServerInterface, entityGetter interfaces.EntityGetter, entityDeleter interfaces.EntityDeleter) *RecordService {
-	return &RecordService{server: server, EntityGetter: entityGetter, EntityDeleter: entityDeleter}
+func NewRecordService(server interfaces.ServerInterface) *RecordService {
+	return &RecordService{server: server}
 }
 
 func (rs *RecordService) GetEntity(recordId int, includeHA bool) (*models.Entity, error) {
 	logger.Info("RecordService GetEntity started", zap.Int("recordId", recordId))
 
 	// Call EntityGetter
-	entity, err := rs.EntityGetter.GetEntity(recordId, includeHA)
+	entity, err := GetEntityByID(rs.server, recordId, includeHA, []string{types.CNAMERECORD, types.HOSTRECORD, types.EXTERNALHOST})
 	if err != nil {
 		return nil, err
-	}
-
-	// Check if the entity type is an alias, host, or external
-	if entity.Type != types.CNAMERECORD && entity.Type != types.HOSTRECORD && entity.Type != types.EXTERNALHOST {
-		return nil, &ErrEntityTypeMismatch{ExpectedTypes: []string{types.CNAMERECORD, types.HOSTRECORD, types.EXTERNALHOST}, ActualType: entity.Type}
 	}
 
 	logger.Info("GetEntity successful",
@@ -53,7 +46,7 @@ func (rs *RecordService) DeleteEntity(recordId int) error {
 	logger.Info("RecordService DeleteEntity started", zap.Int("recordId", recordId))
 
 	// Call EntityDeleter
-	err := rs.EntityDeleter.DeleteEntity(recordId, []string{types.CNAMERECORD, types.HOSTRECORD, types.EXTERNALHOST})
+	err := DeleteEntityByID(rs.server, recordId, []string{types.CNAMERECORD, types.HOSTRECORD, types.EXTERNALHOST})
 	if err != nil {
 		return err
 	}
@@ -62,64 +55,113 @@ func (rs *RecordService) DeleteEntity(recordId int) error {
 	return nil
 }
 
-func (rs *RecordService) GetRecordByType() {
+func (rs *RecordService) GetRecordsByType(recordType string, parameters map[string]interface{}, viewId int) (*[]models.Entity, error) {
+	logger.Info("RecordService GetRecordByType started", zap.String("recordType", recordType))
 
-}
-
-func (rs *RecordService) GetHostRecords(start int, count int, options map[string]string) {
-	logger.Info("GetHostRecords started", zap.Int("start", start), zap.Int("count", count), zap.Any("options", options))
-}
-
-func prepGetHostParams(parameters map[string]interface{}) (string, map[string]string, error) {
-	// Validate the parameters
+	// Validate common parameters
 	count, ok := parameters["count"].(int)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for count")
+		return nil, fmt.Errorf("invalid type for count")
 	}
 	start, ok := parameters["start"].(int)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for start")
-	}
-	options, ok := parameters["options"].(map[string]string)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid type for options")
+		return nil, fmt.Errorf("invalid type for start")
 	}
 
+	var entities *[]models.Entity
+	var err error
+	switch recordType {
+	case types.HOSTRECORD, types.CNAMERECORD:
+		// Validate the parameters
+		options, ok := parameters["options"].(map[string]string)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for options")
+		}
+
+		entities, err = rs.getHostOrAliasRecordsByHint(recordType, start, count, options)
+	case types.EXTERNALHOST:
+		// Validate the parameters
+		name, ok := parameters["name"].(string)
+		if !ok {
+			name = ""
+		}
+		keyword, ok := parameters["keyword"].(string)
+		if !ok {
+			keyword = ""
+		}
+
+		entities, err = rs.getExternalRecord(name, keyword, start, count, false, viewId)
+	default:
+		return nil, fmt.Errorf("invalid record type")
+	}
+
+	// Check for error and return entities
+	if err != nil {
+		return nil, err
+	}
+	return entities, nil
+}
+
+func (rs *RecordService) getHostOrAliasRecordsByHint(recordType string, start int, count int, options map[string]string) (*[]models.Entity, error) {
 	// Define route and parameter map
-	route := "/getHostRecordsByHint"
+	var route string
+	switch recordType {
+	case types.HOSTRECORD:
+		route = "/getHostRecordsByHint"
+	case types.CNAMERECORD:
+		route = "/getAliasRecordsByHint"
+	default:
+		return nil, fmt.Errorf("invalid record type")
+	}
 	paramsMap := map[string]string{
 		"count":   fmt.Sprintf("%d", count),
 		"start":   fmt.Sprintf("%d", start),
 		"options": common.ConvertToSeparatedString(options, "&"),
 	}
 
-	return route, paramsMap, nil
+	// Send request to bluecat
+	params := common.ConvertToSeparatedString(paramsMap, "&")
+	resp, err := rs.server.MakeRequest("GET", route, params, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the response
+	var entitiesResp []models.BluecatEntity
+	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
+		logger.Error("Error unmarshalling entities response", zap.Error(err))
+		return nil, err
+	}
+
+	// For each entity response, convert it to an entity
+	entities := models.ConvertToEntities(entitiesResp)
+
+	return &entities, nil
 }
 
-func prepGetCNAMEParams(parameters map[string]interface{}) (string, map[string]string, error) {
-	// Validate the parameters
-	count, ok := parameters["count"].(int)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid type for count")
+func (rs *RecordService) getExternalRecord(name string, keyword string, start int, count int, includeHA bool, viewId int) (*[]models.Entity, error) {
+	if name != "" {
+		// Cal GetEntityByName
+		entity, err := GetEntityByName(rs.server, name, types.EXTERNALHOST, viewId, includeHA)
+		if err != nil {
+			return nil, err
+		}
+		return &[]models.Entity{*entity}, nil
+	} else if keyword != "" {
+		// Call searchObjectsbyTypes
+		entities, err := searchObjectByTypes(rs.server, keyword, start, count, includeHA, []string{types.EXTERNALHOST})
+		if err != nil {
+			return nil, err
+		}
+		return entities, nil
+	} else {
+		// Call GetEntities
+		entities, err := GetEntities(rs.server, start, count, viewId, types.EXTERNALHOST, includeHA)
+		if err != nil {
+			return nil, err
+		}
+		return entities, nil
 	}
-	start, ok := parameters["start"].(int)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid type for start")
-	}
-	options, ok := parameters["options"].(map[string]string)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid type for options")
-	}
-
-	// Define route and parameter map
-	route := "/getAliasRecordsByHint"
-	paramsMap := map[string]string{
-		"count":   fmt.Sprintf("%d", count),
-		"start":   fmt.Sprintf("%d", start),
-		"options": common.ConvertToSeparatedString(options, "&"),
-	}
-
-	return route, paramsMap, nil
 }
 
 func (rs *RecordService) CreateRecord(recordType string, parameters map[string]interface{}, viewId int) (*models.Entity, error) {
