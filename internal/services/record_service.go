@@ -109,7 +109,7 @@ func (rs *RecordService) getHostOrAliasRecordsByHint(recordType string, start in
 	case types.HOSTRECORD:
 		route = "/getHostRecordsByHint"
 	case types.CNAMERECORD:
-		route = "/getAliasRecordsByHint"
+		route = "/getAliasesByHint"
 	default:
 		return nil, fmt.Errorf("invalid record type")
 	}
@@ -148,7 +148,7 @@ func (rs *RecordService) getExternalRecord(name string, keyword string, start in
 		}
 		return &[]models.Entity{*entity}, nil
 	} else if keyword != "" {
-		// Call searchObjectsbyTypes
+		// Call searchObjectsByTypes
 		entities, err := searchObjectByTypes(rs.server, keyword, start, count, includeHA, []string{types.EXTERNALHOST})
 		if err != nil {
 			return nil, err
@@ -289,7 +289,7 @@ func prepCreateExternalParams(parameters map[string]interface{}, viewId int) (st
 	}
 
 	// Define route and parameter map
-	route := "/addExternalRecord"
+	route := "/addExternalHostRecord"
 	paramsMap := map[string]string{
 		"name":       name,
 		"properties": common.ConvertToSeparatedString(properties, "|"),

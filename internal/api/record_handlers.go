@@ -120,7 +120,7 @@ func parseCreateRecordParams(r *http.Request) (*CreateRecordParams, error) {
 		return nil, fmt.Errorf("missing required parameter: type")
 	}
 	// Make sure record type of either HostRecord, AliasRecord, or ExternalHostRecord
-	if common.Contains([]string{"HostRecord", "AliasRecord", "ExternalHostRecord"}, Params.RecordName) == false {
+	if common.Contains([]string{"HostRecord", "AliasRecord", "ExternalHostRecord"}, Params.RecordType) == false {
 		return nil, fmt.Errorf("invalid record type")
 	}
 
