@@ -239,3 +239,70 @@ func GetEntities(server interfaces.ServerInterface, start int, count int, parent
 	logger.Info("GetEntities successful", zap.Int("count", len(entities)))
 	return &entities, nil
 }
+
+func GetEntityByName(server interfaces.ServerInterface, name string, entityType string, parentId int, includeHA bool) (*models.Entity, error) {
+	logger.Info("GetEntityByName started", zap.String("name", name), zap.String("entityType", entityType))
+
+	// Send http request to bluecat
+	route := "/getEntityByName"
+	params := fmt.Sprintf("name=%s&type=%s&includeHA=%t&parentId=%d", name, entityType, includeHA, parentId)
+
+	resp, err := server.MakeRequest("GET", route, params, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the response
+	var bluecatEntity models.BluecatEntity
+	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
+		logger.Error("Error unmarshalling entity response", zap.Error(err))
+		return nil, err
+	}
+
+	// Check if the response represents an empty entity
+	if bluecatEntity.IsEmpty() {
+		logger.Info("Entity not found", zap.String("name", name))
+		return nil, &ErrEntityNotFound{}
+	}
+
+	// Convert BluecatEntity to Entity
+	entity := bluecatEntity.ToEntity()
+
+	logger.Info("GetEntityByName successful", zap.Int("entityID", entity.ID))
+	return &entity, nil
+}
+
+func searchObjectByTypes(server interfaces.ServerInterface, keyword string, start int, count int, includeHA bool, types []string) (*[]models.Entity, error) {
+	logger.Info("searchObjectByTypes started",
+		zap.String("keyword", keyword),
+		zap.Int("start", start),
+		zap.Int("count", count),
+		zap.Strings("types", types))
+
+	// Convert types array to a comma-separated string
+	typesStr := strings.Join(types, ",")
+
+	// Send http request to bluecat
+	route := "/searchObjectByTypes"
+	params := fmt.Sprintf("keyword=%s&start=%d&count=%d&includeHA=%t&types=%s",
+		keyword, start, count, includeHA, typesStr)
+	resp, err := server.MakeRequest("GET", route, params, nil)
+
+	// Check for errors when sending request
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the response
+	var entitiesResp []models.BluecatEntity
+	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
+		logger.Error("Error unmarshalling entities response", zap.Error(err))
+		return nil, err
+	}
+
+	// For each entity response, convert it to an entity
+	entities := models.ConvertToEntities(entitiesResp)
+
+	logger.Info("searchObjectByTypes successful", zap.Int("count", len(entities)))
+	return &entities, nil
+}
