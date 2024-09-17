@@ -1,6 +1,7 @@
 package api
 
 import (
+	"dns-api-go/internal/common"
 	"dns-api-go/internal/models"
 	"dns-api-go/internal/services"
 	"dns-api-go/logger"
@@ -17,9 +18,9 @@ type MacAddressParams struct {
 }
 
 type MacParams struct {
-	Address    string            `json:"mac"`
-	PoolId     int               `json:"macpool"`
-	Properties map[string]string `json:"properties"`
+	Address    string `json:"mac"`
+	PoolId     int    `json:"macpool"`
+	Properties string `json:"properties"`
 }
 
 // validateMacAddress validates the format of the MAC address
@@ -70,11 +71,6 @@ func parseCreateMacParams(r *http.Request) (*MacParams, error) {
 		return nil, err
 	}
 
-	// Initialize Properties if nil
-	if MacParams.Properties == nil {
-		MacParams.Properties = make(map[string]string)
-	}
-
 	return &MacParams, nil
 }
 
@@ -101,11 +97,6 @@ func parseUpdateMacParams(r *http.Request) (*MacParams, error) {
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&MacParams); err != nil {
 		return nil, fmt.Errorf("failed to decode request body: %v", err)
-	}
-
-	// Initialize Properties if nil
-	if MacParams.Properties == nil {
-		MacParams.Properties = make(map[string]string)
 	}
 
 	return &MacParams, nil
@@ -150,11 +141,14 @@ func (s *server) CreateMacAddressHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Convert properties into a map
+	propertiesMap := common.ConvertToMap(params.Properties, "|")
+
 	// Create mac object
 	mac := &models.Mac{
 		Address:    params.Address,
 		PoolId:     params.PoolId,
-		Properties: params.Properties,
+		Properties: propertiesMap,
 	}
 
 	// Attempt to create the mac address to bluecat and handle potential errors
@@ -186,11 +180,14 @@ func (s *server) UpdateMacAddressHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Convert properties into a map
+	propertiesMap := common.ConvertToMap(params.Properties, "|")
+
 	// Create new mac object with new properties
 	mac := &models.Mac{
 		Address:    params.Address,
 		PoolId:     params.PoolId,
-		Properties: params.Properties,
+		Properties: propertiesMap,
 	}
 
 	// Update the mac object with the new properties
