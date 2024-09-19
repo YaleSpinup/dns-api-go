@@ -27,7 +27,7 @@ func (s *server) routes() {
 	api.HandleFunc("/ping", s.PingHandler).Methods(http.MethodGet)
 	api.HandleFunc("/version", s.VersionHandler).Methods(http.MethodGet)
 	api.Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
-	api.HandleFunc("/", s.ProxyRequestHandler).Methods(http.MethodGet)
+	api.HandleFunc("/", s.HomeHandler).Methods(http.MethodGet)
 	api.HandleFunc("/systeminfo", s.SystemInfoHandler).Methods(http.MethodGet)
 
 	// Custom search based on type and filters

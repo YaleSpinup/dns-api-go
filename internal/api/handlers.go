@@ -23,6 +23,11 @@ import (
 	"strings"
 )
 
+func (s *server) HomeHandler(w http.ResponseWriter, r *http.Request) {
+	account := []string{s.bluecat.account}
+	s.respond(w, account, http.StatusOK)
+}
+
 // PingHandler responds to ping requests
 func (s *server) PingHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Debug("Ping/Pong")
