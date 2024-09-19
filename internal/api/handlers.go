@@ -18,7 +18,6 @@ package api
 
 import (
 	"dns-api-go/logger"
-	"fmt"
 	"go.uber.org/zap"
 	"net/http"
 	"strings"
@@ -58,48 +57,4 @@ func (s *server) SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Encode the map as JSON and write it to the response
 	s.respond(w, info, http.StatusOK)
-}
-
-func (s *server) GetRecordHintHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse query parameters
-	count := r.URL.Query().Get("count")
-	options := r.URL.Query().Get("options")
-	start := r.URL.Query().Get("start")
-	recordType := r.URL.Query().Get("type")
-
-	// Determine the API endpoint based on the record type
-	var endpoint string
-	switch recordType {
-	case "HostRecord":
-		endpoint = "/getHostRecordsByHint"
-	case "AliasRecord":
-		endpoint = "/getAliasesByHint"
-	default:
-		supportedTypes := []string{"HostRecord", "AliasRecord"}
-		errorMsg := fmt.Sprintf("Invalid record type. Supported types: %s", strings.Join(supportedTypes, ", "))
-		logger.Error("Invalid record type requested",
-			zap.String("recordType", recordType),
-			zap.Strings("supportedTypes", supportedTypes))
-		http.Error(w, errorMsg, http.StatusBadRequest)
-		return
-	}
-
-	// Construct the query parameter string
-	queryParam := fmt.Sprintf("count=%s&options=%s&start=%s", count, options, start)
-
-	// Make the API request
-	body, err := s.MakeRequest("GET", endpoint, queryParam, nil)
-	if err != nil {
-		logger.Error("Failed to make API request for record hint",
-			zap.String("endpoint", endpoint),
-			zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Set the Content-Type header to application/json
-	w.Header().Set("Content-Type", "application/json")
-
-	// Write the response body as-is
-	w.Write(body)
 }
