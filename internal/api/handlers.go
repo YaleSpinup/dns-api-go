@@ -23,25 +23,25 @@ import (
 	"strings"
 )
 
-func (s *server) HomeHandler(w http.ResponseWriter, r *http.Request) {
+func (s *server) HomeHandler(w http.ResponseWriter, _ *http.Request) {
 	account := []string{s.bluecat.account}
 	s.respond(w, account, http.StatusOK)
 }
 
 // PingHandler responds to ping requests
-func (s *server) PingHandler(w http.ResponseWriter, r *http.Request) {
+func (s *server) PingHandler(w http.ResponseWriter, _ *http.Request) {
 	logger.Debug("Ping/Pong")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	s.respond(w, "pong", http.StatusOK)
 }
 
 // VersionHandler responds to version requests
-func (s *server) VersionHandler(w http.ResponseWriter, r *http.Request) {
+func (s *server) VersionHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	s.respond(w, s.version, http.StatusOK)
 }
 
-func (s *server) SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
+func (s *server) SystemInfoHandler(w http.ResponseWriter, _ *http.Request) {
 	body, err := s.MakeRequest("GET", "/getSystemInfo", "", nil)
 	if err != nil {
 		logger.Error("Failed to retrieve system info",
