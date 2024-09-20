@@ -140,6 +140,12 @@ func (ms *MacAddressService) AssociateMacAddress(mac models.Mac, configId int) e
 func (ms *MacAddressService) UpdateMacAddress(newMac models.Mac) error {
 	logger.Info("UpdateMacAddress started", zap.Any("New MAC", newMac))
 
+	// Check if mac object exists and if it does, the properties
+	entity, err := ms.GetMacAddress(newMac.Address)
+	if err != nil {
+		return err
+	}
+
 	// Associate mac address with a pool if poolid exists
 	if newMac.PoolId != 0 {
 		// Get the configuration ID
@@ -157,12 +163,6 @@ func (ms *MacAddressService) UpdateMacAddress(newMac models.Mac) error {
 	if len(newMac.Properties) == 0 {
 		logger.Info("No new properties to update")
 		return nil
-	}
-
-	// Get the mac object from inside bluecat to retrieve the properties
-	entity, err := ms.GetMacAddress(newMac.Address)
-	if err != nil {
-		return err
 	}
 
 	// Merge new properties into existing entity properties
