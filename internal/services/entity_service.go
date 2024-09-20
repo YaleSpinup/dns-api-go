@@ -97,12 +97,6 @@ func (es *BaseService) CustomSearch(start int, count int, filters map[string]str
 		return nil, err
 	}
 
-	// Check if the response is empty
-	if len(entitiesResp) == 0 {
-		logger.Info("No CustomSearch results found")
-		return nil, &ErrEntityNotFound{}
-	}
-
 	// For each entity response, convert it to an entity
 	entities := models.ConvertToEntities(entitiesResp)
 
