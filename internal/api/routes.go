@@ -30,14 +30,14 @@ func (s *server) routes() {
 	api.HandleFunc("/", s.HomeHandler).Methods(http.MethodGet)
 	api.HandleFunc("/systeminfo", s.SystemInfoHandler).Methods(http.MethodGet)
 
-	// Custom search based on type and filters
-	api.HandleFunc("/search", s.ProxyRequestHandler).Methods(http.MethodGet)
-
 	// Create a subrouter for routes that need account validation
 	accountRouter := api.PathPrefix("/{account}").Subrouter()
 
 	// Apply the middleware to all routes in this subrouter
 	accountRouter.Use(s.AccountValidationMiddleware)
+
+	// Custom search based on type and filters
+	accountRouter.HandleFunc("/search", s.CustomSearchHandler).Methods(http.MethodGet)
 
 	// Manage entities by ID
 	accountRouter.HandleFunc("/id/{id}", s.GetEntityHandler()).Methods(http.MethodGet)

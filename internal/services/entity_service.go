@@ -5,6 +5,8 @@ import (
 	"dns-api-go/internal/models"
 	"dns-api-go/internal/types"
 	"dns-api-go/logger"
+	"encoding/json"
+	"fmt"
 	"go.uber.org/zap"
 	"net/url"
 )
@@ -71,7 +73,39 @@ func (es *BaseService) CustomSearch(start int, count int, filters map[string]str
 	// Construct route and query parameters
 	route := "/customSearch"
 	queryParams := url.Values{}
+	queryParams.Set("start", fmt.Sprintf("%d", start))
+	queryParams.Set("count", fmt.Sprintf("%d", count))
+	queryParams.Set("type", objectType)
+	queryParams.Set("includeHA", "false")
+	for key, value := range filters {
+		queryParams.Add("filters", fmt.Sprintf("%s=%s", key, value))
+	}
+	for _, option := range options {
+		queryParams.Add("options", option)
+	}
 
-	logger.Info("CustomSearch successful", zap.Int("count", len(*entities)))
-	return entities, nil
+	// Send http request to bluecat
+	resp, err := es.server.MakeRequest("GET", route, queryParams.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the response
+	var entitiesResp []models.BluecatEntity
+	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
+		logger.Error("Error unmarshalling entities response", zap.Error(err))
+		return nil, err
+	}
+
+	// Check if the response is empty
+	if len(entitiesResp) == 0 {
+		logger.Info("No CustomSearch results found")
+		return nil, &ErrEntityNotFound{}
+	}
+
+	// For each entity response, convert it to an entity
+	entities := models.ConvertToEntities(entitiesResp)
+
+	logger.Info("CustomSearch successful", zap.Int("count", len(entities)))
+	return &entities, nil
 }
