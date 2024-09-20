@@ -6,6 +6,7 @@ import (
 	"dns-api-go/internal/types"
 	"dns-api-go/logger"
 	"go.uber.org/zap"
+	"net/url"
 )
 
 type BaseEntityService interface {
@@ -57,4 +58,20 @@ func (es *BaseService) DeleteEntity(id int) error {
 
 	logger.Info("DeleteEntity successful", zap.Int("id", id))
 	return nil
+}
+
+func (es *BaseService) CustomSearch(start int, count int, filters map[string]string, options []string, objectType string) (*[]models.Entity, error) {
+	logger.Info("CustomSearch started",
+		zap.Int("start", start),
+		zap.Int("count", count),
+		zap.Any("filters", filters),
+		zap.Any("options", options),
+		zap.String("objectType", objectType))
+
+	// Construct route and query parameters
+	route := "/customSearch"
+	queryParams := url.Values{}
+
+	logger.Info("CustomSearch successful", zap.Int("count", len(*entities)))
+	return entities, nil
 }
