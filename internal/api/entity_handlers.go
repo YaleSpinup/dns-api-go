@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
 type CustomSearchParams struct {
+	offset     int
+	limit      int
 	filters    map[string]string
 	objectType string
 }
@@ -19,7 +22,41 @@ type CustomSearchParams struct {
 func parseCustomSearchParams(r *http.Request) (*CustomSearchParams, error) {
 	var Params CustomSearchParams
 
+	// Set default values
+	Params.offset = 0
+	Params.limit = 100
+
 	query := r.URL.Query()
+
+	// Parse offset if it is not empty
+	if offsetStr := query.Get("offset"); offsetStr != "" {
+		parsedOffset, err := strconv.Atoi(offsetStr)
+		// Return error if offset is not a valid integer
+		if err != nil {
+			return nil, fmt.Errorf("invalid offset value: %v", err)
+		}
+		// Return error if offset is negative
+		if parsedOffset < 0 {
+			return nil, fmt.Errorf("offset cannot be negative")
+		}
+		// Override the default value
+		Params.offset = parsedOffset
+	}
+
+	// Parse limit if it is not empty
+	if limitStr := query.Get("limit"); limitStr != "" {
+		parsedLimit, err := strconv.Atoi(limitStr)
+		// Return error if limit is not a valid integer
+		if err != nil {
+			return nil, fmt.Errorf("invalid limit value: %v", err)
+		}
+		// Return error if limit is negative
+		if parsedLimit < 0 {
+			return nil, fmt.Errorf("limit cannot be negative")
+		}
+		// Override the default value
+		Params.limit = parsedLimit
+	}
 
 	// Parse filters from the request URL
 	filters := query.Get("filters")
@@ -69,10 +106,10 @@ func (s *server) CustomSearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call base service
-	entities, err := s.services.BaseService.CustomSearch(0, 100, params.filters, nil, params.objectType)
+	entities, err := s.services.BaseService.CustomSearch(params.offset, params.limit, params.filters, nil, params.objectType)
 	if err != nil {
 		logger.Error("Error with custom search", zap.Error(err))
-		// Determine thet ype of error and set the HTTP response accordingly
+		// Determine the type of error and set the HTTP response accordingly
 		switch e := err.(type) {
 		case *services.ErrEntityNotFound:
 			http.Error(w, e.Error(), http.StatusNotFound)
