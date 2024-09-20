@@ -168,31 +168,6 @@ func (rs *RecordService) getExternalRecord(name string, keyword string, start in
 func (rs *RecordService) CreateRecord(recordType string, parameters map[string]interface{}, viewId int) (*models.Entity, error) {
 	logger.Info("Create Record started", zap.String("recordType", recordType))
 
-	var route string
-	var paramsMap map[string]string
-	var err error
-
-	// Set the route and properties map according to the record type
-	switch recordType {
-	case types.HOSTRECORD:
-		route, paramsMap, err = prepCreateHostParams(parameters, viewId)
-		if err != nil {
-			return nil, err
-		}
-	case types.CNAMERECORD:
-		route, paramsMap, err = prepCreateCNAMEParams(parameters, viewId)
-		if err != nil {
-			return nil, err
-		}
-	case types.EXTERNALHOST:
-		route, paramsMap, err = prepCreateExternalParams(parameters, viewId)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, fmt.Errorf("invalid record type")
-	}
-
 	// Check if record already exists in bluecat
 	checkRecordParams := map[string]interface{}{
 		"name":    parameters["name"],
@@ -223,6 +198,30 @@ func (rs *RecordService) CreateRecord(recordType string, parameters map[string]i
 				return nil, &ErrEntityAlreadyExists{EntityID: entity.Name}
 			}
 		}
+	}
+
+	var route string
+	var paramsMap map[string]string
+
+	// Set the route and properties map according to the record type
+	switch recordType {
+	case types.HOSTRECORD:
+		route, paramsMap, err = prepCreateHostParams(parameters, viewId)
+		if err != nil {
+			return nil, err
+		}
+	case types.CNAMERECORD:
+		route, paramsMap, err = prepCreateCNAMEParams(parameters, viewId)
+		if err != nil {
+			return nil, err
+		}
+	case types.EXTERNALHOST:
+		route, paramsMap, err = prepCreateExternalParams(parameters, viewId)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid record type")
 	}
 
 	// Send request to bluecat
