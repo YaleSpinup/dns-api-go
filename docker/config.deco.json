@@ -9,8 +9,10 @@
     "account": "{{ .bluecat_account }}",
     "baseUrl": "{{ .bluecat_api_baseUrl }}",
     "username": "{{ .bluecat_api_username }}",
-    "password": "{{ .bluecat_api_password }}"
+    "password": "{{ .bluecat_api_password }}",
+    "viewId": "{{ .bluecat_viewId }}"
   },
+  "cidrFile": "{{ .cidr_file }}",
   "token": "{{ .token }}",
   "logLevel": "{{ .log_level }}",
   "org": "{{ .org }}"
