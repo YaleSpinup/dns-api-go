@@ -31,22 +31,22 @@ func (s *server) routes() {
 	api.HandleFunc("/systeminfo", s.SystemInfoHandler).Methods(http.MethodGet)
 	api.HandleFunc("/record/hint", s.GetRecordHintHandler).Methods(http.MethodGet)
 
+	// Custom search based on type and filters
+	api.HandleFunc("/search", s.ProxyRequestHandler).Methods(http.MethodGet)
+
 	// Create a subrouter for routes that need account validation
 	accountRouter := api.PathPrefix("/{account}").Subrouter()
 
 	// Apply the middleware to all routes in this subrouter
 	accountRouter.Use(s.AccountValidationMiddleware)
 
-	// Custom search based on type and filters
-	api.HandleFunc("/search", s.ProxyRequestHandler).Methods(http.MethodGet)
-
 	// Manage entities by ID
 	accountRouter.HandleFunc("/id/{id}", s.GetEntityHandler()).Methods(http.MethodGet)
 	accountRouter.HandleFunc("/id/{id}", s.DeleteEntityHandler()).Methods(http.MethodDelete)
 
 	// Manage Zones
-	api.HandleFunc("/{account}/zones", s.ProxyRequestHandler).Methods(http.MethodGet)
-	api.HandleFunc("/{account}/zones/{id}", s.ProxyRequestHandler).Methods(http.MethodGet)
+	accountRouter.HandleFunc("/zones", s.GetZonesHandler()).Methods(http.MethodGet)
+	accountRouter.HandleFunc("/zones/{id}", s.GetZoneHandler()).Methods(http.MethodGet)
 
 	// Manage DNS records
 	api.HandleFunc("/{account}/records", s.ProxyRequestHandler).Methods(http.MethodGet, http.MethodPost)
