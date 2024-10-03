@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -172,4 +173,19 @@ func handleError(w http.ResponseWriter, err error) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 	}
+}
+
+// validateMacAddress validates the format of the MAC address
+// mac address should be in the format: nnnnnnnnnnnn or nn:nn:nn:nn:nn:nn or nn-nn-nn-nn-nn-nn
+func validateMacAddress(macAddress string) error {
+	// Define the regular expression for a valid MAC address
+	macRegex := `^([0-9A-Fa-f]{12}|([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2})$`
+	re := regexp.MustCompile(macRegex)
+
+	// Validate the MAC address format
+	if !re.MatchString(macAddress) {
+		return fmt.Errorf("invalid MAC address format. MAC address should be in the format: nnnnnnnnnnnn or nn:nn:nn:nn:nn:nn or nn-nn-nn-nn-nn-nn")
+	}
+
+	return nil
 }

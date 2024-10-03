@@ -7,6 +7,7 @@ import (
 
 type MockServer struct {
 	MakeRequestFunc func(method, route, queryParam string, body io.Reader) ([]byte, error)
+	GetCIDRFileFunc func() (string, error)
 }
 
 func (m *MockServer) MakeRequest(method, route, queryParam string, body io.Reader) ([]byte, error) {
@@ -15,4 +16,12 @@ func (m *MockServer) MakeRequest(method, route, queryParam string, body io.Reade
 	}
 
 	return nil, errors.New("MakeRequest not mocked")
+}
+
+func (m *MockServer) GetCIDRFile() (string, error) {
+	if m.GetCIDRFileFunc != nil {
+		return m.GetCIDRFileFunc()
+	}
+
+	return "", errors.New("GetCIDRFile not mocked")
 }
