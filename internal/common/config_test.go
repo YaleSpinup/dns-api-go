@@ -18,6 +18,7 @@ package common
 
 import (
 	"bytes"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -29,7 +30,8 @@ var testConfig = []byte(
 			"account": "test",
 			"baseUrl": "https://bluecat.example.com",
 			"username": "test",
-			"password": "test"
+			"password": "test",
+			"viewId": "01234"
 		},
 		"token": "SEKRET",
 		"logLevel": "info",
@@ -37,6 +39,17 @@ var testConfig = []byte(
 	}`)
 
 var brokenConfig = []byte(`{ "foobar": { "baz": "biz" }`)
+
+func TestMain(m *testing.M) {
+	// Setup phase: Initialize the logger
+	SetupLogger()
+
+	// Run the tests
+	code := m.Run()
+
+	// Exit with the code from m.Run()
+	os.Exit(code)
+}
 
 func TestReadConfig(t *testing.T) {
 	expectedConfig := Config{
@@ -46,6 +59,7 @@ func TestReadConfig(t *testing.T) {
 			BaseUrl:  "https://bluecat.example.com",
 			Username: "test",
 			Password: "test",
+			ViewId:   "01234",
 		},
 		Token:    "SEKRET",
 		LogLevel: "info",

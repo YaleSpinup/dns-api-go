@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -51,8 +52,9 @@ func TestPingHandler(t *testing.T) {
 			status, http.StatusOK)
 	}
 
-	expected := `pong`
-	if rr.Body.String() != expected {
+	expected := `"pong"`
+
+	if strings.TrimSpace(rr.Body.String()) != expected {
 		t.Errorf("handler returned unexpected body: got %v want %v",
 			rr.Body.String(), expected)
 	}
@@ -81,7 +83,7 @@ func TestVersionHandler(t *testing.T) {
 	}
 
 	expected := `{"version":"0.1.0","githash":"No Git Commit Provided","buildstamp":"No BuildStamp Provided"}`
-	if rr.Body.String() != expected {
+	if strings.TrimSpace(rr.Body.String()) != expected {
 		t.Errorf("handler returned unexpected body: got %v want %v",
 			rr.Body.String(), expected)
 	}

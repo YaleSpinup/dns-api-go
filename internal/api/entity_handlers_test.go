@@ -95,7 +95,7 @@ func TestParseEntityParams(t *testing.T) {
 	}
 }
 
-func TestGetEntityIDHandler(t *testing.T) {
+func TestGetEntityHandler(t *testing.T) {
 	tests := []struct {
 		name           string
 		id             string
@@ -110,28 +110,34 @@ func TestGetEntityIDHandler(t *testing.T) {
 			id:        "1",
 			includeHA: "true",
 			mockEntity: &models.Entity{
-				ID:         1,
-				Name:       "Test Entity",
-				Type:       "TestType",
-				Properties: "TestProperties",
+				ID:   1,
+				Name: "Test Entity",
+				Type: "TestType",
+				Properties: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
 			},
 			mockError:      nil,
 			expectedStatus: http.StatusOK,
-			expectedBody:   `{"ID":1,"Name":"Test Entity","Type":"TestType","Properties":"TestProperties"}`,
+			expectedBody:   `{"ID":1,"Name":"Test Entity","Type":"TestType","Properties":"key1=value1|key2=value2"}`,
 		},
 		{
 			name:      "Missing includeHA",
 			id:        "1",
 			includeHA: "",
 			mockEntity: &models.Entity{
-				ID:         1,
-				Name:       "Test Entity",
-				Type:       "TestType",
-				Properties: "TestProperties",
+				ID:   1,
+				Name: "Test Entity",
+				Type: "TestType",
+				Properties: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
 			},
 			mockError:      nil,
 			expectedStatus: http.StatusOK,
-			expectedBody:   `{"ID":1,"Name":"Test Entity","Type":"TestType","Properties":"TestProperties"}`,
+			expectedBody:   `{"ID":1,"Name":"Test Entity","Type":"TestType","Properties":"key1=value1|key2=value2"}`,
 		},
 		{
 			name:           "Invalid ID format",

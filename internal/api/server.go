@@ -20,10 +20,11 @@ import (
 	"context"
 	"dns-api-go/internal/common"
 	"dns-api-go/internal/services"
+	"dns-api-go/logger"
 	"errors"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"math/rand"
 	"net/http"
 	"os"
@@ -58,6 +59,7 @@ type bluecat struct {
 	password  string
 	token     string
 	tokenLock sync.Mutex
+	viewId    string
 }
 
 type Services struct {
@@ -97,22 +99,24 @@ func NewServer(config common.Config) error {
 	}
 
 	if b := config.Bluecat; b != nil {
-		log.Debugf("configuring bluecat %s", b.BaseUrl)
+		logger.Debug("configuring bluecat", zap.String("baseUrl", b.BaseUrl))
 		s.bluecat = &bluecat{
 			account:  b.Account,
 			baseUrl:  b.BaseUrl,
 			user:     b.Username,
 			password: b.Password,
+			viewId:   b.ViewId,
 		}
 	}
 
 	// Define services that interact with Bluecat entities
+	baseService := services.NewBaseService(&s)
 	s.services = Services{
-		BaseService: services.NewBaseService(&s),
+		BaseService: baseService,
 	}
 
 	if b := config.ProxyBackend; b != nil {
-		log.Debugf("configuring proxy backend %s", b.BaseUrl)
+		logger.Debug("configuring proxy backend", zap.String("baseUrl", b.BaseUrl))
 		s.backend = &proxyBackend{
 			baseUrl: b.BaseUrl,
 			token:   b.Token,
@@ -140,7 +144,7 @@ func NewServer(config common.Config) error {
 		ReadTimeout:  15 * time.Second,
 	}
 
-	log.Infof("Starting listener on %s", config.ListenAddress)
+	logger.Info("Starting listener", zap.String("address", config.ListenAddress))
 	if err := srv.ListenAndServe(); err != nil {
 		return err
 	}
@@ -157,7 +161,7 @@ type LogWriter struct {
 func (w LogWriter) Write(p []byte) (n int, err error) {
 	n, err = w.ResponseWriter.Write(p)
 	if err != nil {
-		log.Errorf("Write failed: %v", err)
+		logger.Error("Write failed", zap.Error(err))
 	}
 	return
 }
@@ -176,13 +180,13 @@ func rollBack(t *[]rollbackFunc) {
 	done := make(chan string, 1)
 	go func() {
 		tasks := *t
-		log.Errorf("executing rollback of %d tasks", len(tasks))
+		logger.Error("executing rollback of tasks", zap.Int("taskCount", len(tasks)))
 		for i := len(tasks) - 1; i >= 0; i-- {
 			f := tasks[i]
 			if funcerr := f(timeout); funcerr != nil {
-				log.Errorf("rollback task error: %s, continuing rollback", funcerr)
+				logger.Error("rollback task error, continuing rollback", zap.Error(funcerr))
 			}
-			log.Infof("executed rollback task %d of %d", len(tasks)-i, len(tasks))
+			logger.Info("executed rollback task", zap.Int("currentTask", len(tasks)-i), zap.Int("totalTasks", len(tasks)))
 		}
 		done <- "success"
 	}()
@@ -190,9 +194,9 @@ func rollBack(t *[]rollbackFunc) {
 	// wait for a done context
 	select {
 	case <-timeout.Done():
-		log.Error("timeout waiting for successful rollback")
+		logger.Error("timeout waiting for successful rollback")
 	case <-done:
-		log.Info("successfully rolled back")
+		logger.Info("successfully rolled back")
 	}
 }
 

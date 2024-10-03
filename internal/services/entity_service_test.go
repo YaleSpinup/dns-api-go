@@ -5,8 +5,8 @@ import (
 	"dns-api-go/internal/mocks"
 	"dns-api-go/internal/models"
 	"github.com/pkg/errors"
+	"io"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -22,7 +22,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestGetEntityByID(t *testing.T) {
+func TestGetEntity(t *testing.T) {
 	tests := []struct {
 		name                    string
 		entityId                int
@@ -40,14 +40,17 @@ func TestGetEntityByID(t *testing.T) {
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
-				"properties": "TestProperties"
+				"properties": "key1=value1|key2=value2"
 			}`),
 			mockMakeRequestError: nil,
 			expectedResponse: &models.Entity{
-				ID:         1,
-				Name:       "Test Entity",
-				Type:       "HostRecord",
-				Properties: "TestProperties",
+				ID:   1,
+				Name: "Test Entity",
+				Type: "HostRecord",
+				Properties: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
 			},
 			expectedError: nil,
 		},
@@ -88,149 +91,99 @@ func TestGetEntityByID(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			mockServer := &mocks.MockServer{
-				MakeRequestFunc: func(method, route, queryParam string) ([]byte, error) {
+				MakeRequestFunc: func(method, route, queryParam string, body io.Reader) ([]byte, error) {
 					return tc.mockMakeRequestResponse, tc.mockMakeRequestError
 				},
 			}
 
 			entityService := NewBaseService(mockServer)
-			entity, err := entityService.GetEntityByID(tc.entityId, tc.includeHA)
+			entity, err := entityService.GetEntity(tc.entityId, tc.includeHA)
 
-			// If json unmarshalling error, check that any error is returned
-			if tc.expectedError != nil && tc.expectedError.Error() == "Simulating unmarshal error" {
-				if err == nil {
-					t.Errorf("%s: expected an unmarshal error, got nil", tc.name)
-				}
-				// For other errors, check if returned error matches expected error
-			} else if tc.expectedError != nil && !common.CompareErrors(tc.expectedError, err) {
-				t.Errorf("%s: expected error %v, got %v", tc.name, tc.expectedError, err)
-				// No error expected
-			} else if tc.expectedError == nil && err != nil {
-				t.Errorf("%s: expected no error, got %v", tc.name, err)
-			}
-
-			// Check the response
-			if !reflect.DeepEqual(entity, tc.expectedResponse) {
-				t.Errorf("%s: expected response %+v, got %+v", tc.name, tc.expectedResponse, entity)
-			}
+			common.CheckError(t, tc.name, tc.expectedError, err)
+			common.CheckResponse(t, tc.name, tc.expectedResponse, entity)
 		})
 	}
 }
 
-func TestToEntity(t *testing.T) {
+func TestDeleteEntity(t *testing.T) {
 	tests := []struct {
-		name           string
-		entityResponse EntityResponse
-		expectedEntity *models.Entity
+		name                   string
+		entityId               int
+		mockMakeReqGetEntResp  []byte
+		mockMakeReqGetEntError error
+		mockMakeReqDelEntError error
+		expectedError          error
 	}{
 		{
-			name: "All fields present",
-			entityResponse: EntityResponse{
-				ID:         1,
-				Name:       common.StringPtr("Test Entity"),
-				Type:       common.StringPtr("HostRecord"),
-				Properties: common.StringPtr("Test Properties"),
-			},
-			expectedEntity: &models.Entity{
-				ID:         1,
-				Name:       "Test Entity",
-				Type:       "HostRecord",
-				Properties: "Test Properties",
-			},
-		},
-		{
-			name: "Name and Properties are nil",
-			entityResponse: EntityResponse{
-				ID:         1,
-				Name:       nil,
-				Type:       common.StringPtr("HostRecord"),
-				Properties: nil,
-			},
-			expectedEntity: &models.Entity{
-				ID:         1,
-				Name:       "",
-				Type:       "HostRecord",
-				Properties: "",
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			entity := tc.entityResponse.ToEntity()
-			if !reflect.DeepEqual(entity, tc.expectedEntity) {
-				t.Errorf("%s: expected response %+v, got %+v", tc.name, tc.expectedEntity, entity)
-			}
-		})
-	}
-}
-
-func TestDeleteEntityByID(t *testing.T) {
-	tests := []struct {
-		name                       string
-		entityId                   int
-		mockMakeReqGetEntByIDResp  []byte
-		mockMakeReqGetEntByIDError error
-		mockMakeReqDelEntByIDError error
-		expectedError              error
-	}{
-		{
-			name:     "Successful deletion",
+			name:     "Successful deletion with expected types",
 			entityId: 1,
-			mockMakeReqGetEntByIDResp: []byte(`{
+			mockMakeReqGetEntResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
-				"properties": "TestProperties"
+				"properties": "key1=value1|key2=value2"
 			}`),
-			mockMakeReqGetEntByIDError: nil,
-			mockMakeReqDelEntByIDError: nil,
-			expectedError:              nil,
+			mockMakeReqGetEntError: nil,
+			mockMakeReqDelEntError: nil,
+			expectedError:          nil,
 		},
 		{
-			name:                       "GetEntityByID error",
-			entityId:                   999,
-			mockMakeReqGetEntByIDResp:  nil,
-			mockMakeReqGetEntByIDError: errors.New("Simulating GetEntityByID error"),
-			mockMakeReqDelEntByIDError: nil,
-			expectedError:              errors.New("Simulating GetEntityByID error"),
+			name:     "Successful deletion with empty expected types",
+			entityId: 1,
+			mockMakeReqGetEntResp: []byte(`{
+				"id": 1,
+				"name": "Test Entity",
+				"type": "HostRecord",
+				"properties": "key1=value1|key2=value2"
+			}`),
+			mockMakeReqGetEntError: nil,
+			mockMakeReqDelEntError: nil,
+			expectedError:          nil,
+		},
+		{
+			name:                   "GetEntity error",
+			entityId:               999,
+			mockMakeReqGetEntResp:  nil,
+			mockMakeReqGetEntError: errors.New("Simulating GetEntity error"),
+			mockMakeReqDelEntError: nil,
+			expectedError:          errors.New("Simulating GetEntity error"),
 		},
 		{
 			name:     "Entity deletion not allowed",
 			entityId: 1,
-			mockMakeReqGetEntByIDResp: []byte(`{
+			mockMakeReqGetEntResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
 				"type": "INVALIDTYPE",
-				"properties": "TestProperties"
+				"properties": "key1=value1|key2=value2"
 			}`),
-			mockMakeReqGetEntByIDError: nil,
-			mockMakeReqDelEntByIDError: nil,
-			expectedError:              &ErrDeleteNotAllowed{Type: "INVALIDTYPE"},
+			mockMakeReqGetEntError: nil,
+			mockMakeReqDelEntError: nil,
+			expectedError:          &ErrDeleteNotAllowed{Type: "INVALIDTYPE"},
 		},
 		{
 			name:     "MakeRequest error",
 			entityId: 1,
-			mockMakeReqGetEntByIDResp: []byte(`{
+			mockMakeReqGetEntResp: []byte(`{
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
-				"properties": "TestProperties"
+				"properties": "key1=value1|key2=value2"
 			}`),
-			mockMakeReqGetEntByIDError: nil,
-			mockMakeReqDelEntByIDError: errors.New("Simulating MakeRequest error"),
-			expectedError:              errors.New("Simulating MakeRequest error"),
+			mockMakeReqGetEntError: nil,
+			mockMakeReqDelEntError: errors.New("Simulating MakeRequest error"),
+			expectedError:          errors.New("Simulating MakeRequest error"),
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			mockServer := &mocks.MockServer{
-				MakeRequestFunc: func(method, route, queryParam string) ([]byte, error) {
+				MakeRequestFunc: func(method, route, queryParam string, body io.Reader) ([]byte, error) {
 					if strings.Contains(route, "getEntityById") {
-						return tc.mockMakeReqGetEntByIDResp, tc.mockMakeReqGetEntByIDError
+						return tc.mockMakeReqGetEntResp, tc.mockMakeReqGetEntError
 					} else if strings.Contains(route, "delete") {
-						return nil, tc.mockMakeReqDelEntByIDError
+						return nil, tc.mockMakeReqDelEntError
 					} else {
 						return nil, errors.New("unexpected route")
 					}
@@ -238,12 +191,9 @@ func TestDeleteEntityByID(t *testing.T) {
 			}
 
 			entityService := NewBaseService(mockServer)
-			err := entityService.DeleteEntityByID(tc.entityId)
-			if tc.expectedError != nil && !common.CompareErrors(tc.expectedError, err) {
-				t.Errorf("%s: expected error %v, got %v", tc.name, tc.expectedError, err)
-			} else if tc.expectedError == nil && err != nil {
-				t.Errorf("%s: expected no error, got %v", tc.name, err)
-			}
+			err := entityService.DeleteEntity(tc.entityId)
+
+			common.CheckError(t, tc.name, tc.expectedError, err)
 		})
 	}
 }

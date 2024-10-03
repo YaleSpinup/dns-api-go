@@ -1,5 +1,5 @@
 data
-config/config.json
+config
 k8s/k8s-config.yaml
 vendor
 .vscode
