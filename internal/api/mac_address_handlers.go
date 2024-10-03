@@ -10,7 +10,6 @@ import (
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	"net/http"
-	"regexp"
 )
 
 type MacAddressParams struct {
@@ -21,21 +20,6 @@ type MacParams struct {
 	Address    string `json:"mac"`
 	PoolId     int    `json:"macpool"`
 	Properties string `json:"properties"`
-}
-
-// validateMacAddress validates the format of the MAC address
-// mac address should be in the format: nnnnnnnnnnnn or nn:nn:nn:nn:nn:nn or nn-nn-nn-nn-nn-nn
-func validateMacAddress(macAddress string) error {
-	// Define the regular expression for a valid MAC address
-	macRegex := `^([0-9A-Fa-f]{12}|([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2})$`
-	re := regexp.MustCompile(macRegex)
-
-	// Validate the MAC address format
-	if !re.MatchString(macAddress) {
-		return fmt.Errorf("invalid MAC address format. MAC address should be in the format: nnnnnnnnnnnn or nn:nn:nn:nn:nn:nn or nn-nn-nn-nn-nn-nn")
-	}
-
-	return nil
 }
 
 // parseMacAddressParams parses and validates the parameters from the request.
