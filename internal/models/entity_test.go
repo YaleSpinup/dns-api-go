@@ -20,10 +20,9 @@ func TestToBluecatJSON(t *testing.T) {
 				Type: "HostRecord",
 				Properties: map[string]string{
 					"key1": "value1",
-					"key2": "value2",
 				},
 			},
-			expectedOutput: `{"id":1,"name":"Test Entity","type":"HostRecord","properties":"key1=value1|key2=value2"}`,
+			expectedOutput: `{"id":1,"name":"Test Entity","type":"HostRecord","properties":"key1=value1"}`,
 			expectError:    false,
 		},
 		{

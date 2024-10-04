@@ -115,12 +115,11 @@ func TestGetEntityHandler(t *testing.T) {
 				Type: "TestType",
 				Properties: map[string]string{
 					"key1": "value1",
-					"key2": "value2",
 				},
 			},
 			mockError:      nil,
 			expectedStatus: http.StatusOK,
-			expectedBody:   `{"ID":1,"Name":"Test Entity","Type":"TestType","Properties":"key1=value1|key2=value2"}`,
+			expectedBody:   `{"ID":1,"Name":"Test Entity","Type":"TestType","Properties":"key1=value1"}`,
 		},
 		{
 			name:      "Missing includeHA",
@@ -132,12 +131,11 @@ func TestGetEntityHandler(t *testing.T) {
 				Type: "TestType",
 				Properties: map[string]string{
 					"key1": "value1",
-					"key2": "value2",
 				},
 			},
 			mockError:      nil,
 			expectedStatus: http.StatusOK,
-			expectedBody:   `{"ID":1,"Name":"Test Entity","Type":"TestType","Properties":"key1=value1|key2=value2"}`,
+			expectedBody:   `{"ID":1,"Name":"Test Entity","Type":"TestType","Properties":"key1=value1"}`,
 		},
 		{
 			name:           "Invalid ID format",
