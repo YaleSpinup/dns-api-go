@@ -103,6 +103,15 @@ func GetEntityByID(server interfaces.ServerInterface, id int, includeHA bool, ex
 	return &entity, nil
 }
 
+var ALLOWDELETE = []string{
+	types.HOSTRECORD,
+	types.EXTERNALHOST,
+	types.CNAMERECORD,
+	types.IP4ADDRESS,
+	types.MACADDRESS,
+	types.MACPOOL,
+}
+
 // DeleteEntityByID Deletes an entity by ID from bluecat
 func DeleteEntityByID(server interfaces.ServerInterface, id int, expectedTypes []string) error {
 	logger.Info("DeleteEntityByID started", zap.Int("id", id))

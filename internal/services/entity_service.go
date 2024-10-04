@@ -3,7 +3,6 @@ package services
 import (
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
-	"dns-api-go/internal/types"
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
@@ -38,15 +37,6 @@ func (es *BaseService) GetEntity(id int, includeHA bool) (*models.Entity, error)
 		zap.String("entityType", entity.Type))
 
 	return entity, nil
-}
-
-var ALLOWDELETE = []string{
-	types.HOSTRECORD,
-	types.EXTERNALHOST,
-	types.CNAMERECORD,
-	types.IP4ADDRESS,
-	types.MACADDRESS,
-	types.MACPOOL,
 }
 
 // DeleteEntity Deletes an entity by ID from bluecat
