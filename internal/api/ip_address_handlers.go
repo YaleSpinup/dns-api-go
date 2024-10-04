@@ -20,7 +20,7 @@ type AssignIpAddressParams struct {
 	MacAddress  string `json:"mac"`
 	ParentId    int    `json:"network_id"`
 	Hostname    string `json:"hostname"`
-	ReverseFlag string `json:"reverse"`
+	ReverseFlag bool   `json:"reverse"`
 	CIDR        string `json:"cidr"`
 	Properties  string `json:"properties"`
 }
@@ -72,12 +72,8 @@ func parseAssignIpAddressBody(s *server, ipAddressService services.IpAddressEnti
 	}
 
 	// Validate the presence of reverse flag
-	if AssignIpAddressParams.ReverseFlag == "" {
+	if !AssignIpAddressParams.ReverseFlag {
 		return nil, fmt.Errorf("missing required parameter: reverse")
-	}
-	// ReverseFlag must be true or false
-	if AssignIpAddressParams.ReverseFlag != "true" && AssignIpAddressParams.ReverseFlag != "false" {
-		return nil, fmt.Errorf("reverse flag must be true or false")
 	}
 
 	return &AssignIpAddressParams, nil
@@ -225,7 +221,7 @@ func (s *server) AssignIpAddressHandler(w http.ResponseWriter, r *http.Request) 
 	hostInfo := map[string]string{
 		"hostname":       body.Hostname,
 		"viewId":         s.bluecat.viewId,
-		"reverseFlag":    body.ReverseFlag,
+		"reverseFlag":    fmt.Sprintf("%t", body.ReverseFlag),
 		"sameAsZoneFlag": "false",
 	}
 
