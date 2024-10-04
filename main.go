@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 
@@ -69,10 +68,17 @@ func main() {
 	// set APP_ENV variable based on org in config.go
 	var appEnv string
 	if config.Org == "dev" {
-		appEnv = "dev"
+		appEnv = "development"
+	} else if config.Org == "sstst" {
+		appEnv = "test"
+	} else if config.Org == "ss" {
+		appEnv = "production"
 	} else {
-		appEnv = "prod"
+		// Default to development if org is not set
+		logger.Error("Invalid org in config.go. Defaulting to development")
+		appEnv = "development"
 	}
+
 	os.Setenv("APP_ENV", appEnv)
 
 	config.Version = common.Version{
@@ -118,7 +124,7 @@ func configReader() io.Reader {
 		logger.Fatal("unable to open config file", zap.Error(err))
 	}
 
-	c, err := ioutil.ReadAll(configFile)
+	c, err := io.ReadAll(configFile)
 	if err != nil {
 		logger.Fatal("unable to read config file", zap.Error(err))
 	}
