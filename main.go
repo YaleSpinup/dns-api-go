@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 
@@ -125,7 +124,7 @@ func configReader() io.Reader {
 		logger.Fatal("unable to open config file", zap.Error(err))
 	}
 
-	c, err := ioutil.ReadAll(configFile)
+	c, err := io.ReadAll(configFile)
 	if err != nil {
 		logger.Fatal("unable to read config file", zap.Error(err))
 	}
