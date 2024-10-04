@@ -16,9 +16,9 @@ func SetLogLevel(appEnv string, logLevel string) {
 	var zapConfig zap.Config
 
 	if appEnv == "development" {
-		zapConfig = zap.NewProductionConfig()
-	} else {
 		zapConfig = zap.NewDevelopmentConfig()
+	} else {
+		zapConfig = zap.NewProductionConfig()
 	}
 
 	switch logLevel {
