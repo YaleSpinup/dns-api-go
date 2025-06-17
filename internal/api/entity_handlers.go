@@ -6,12 +6,14 @@ import (
 	"dns-api-go/internal/types"
 	"dns-api-go/logger"
 	"fmt"
-	"go.uber.org/zap"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
+// CustomSearchParams represents the parameters for custom search requests
 type CustomSearchParams struct {
 	offset     int
 	limit      int
@@ -84,16 +86,54 @@ func parseCustomSearchParams(r *http.Request) (*CustomSearchParams, error) {
 	return &Params, nil
 }
 
-// GetEntityHandler handles GET requests for retrieving an entity by ID.
+// GetEntityHandler handles GET requests for retrieving an entity by ID
+// @Summary Get entity by ID
+// @Description Retrieves detailed information about a specific entity using its unique identifier
+// @Tags Entity Management
+// @Produce json
+// @Param account path string true "Account identifier"
+// @Param id path int true "Entity ID"
+// @Param includeHA query bool false "Include high availability information" default(true)
+// @Success 200 {object} models.Entity "Entity details"
+// Failure 400 {string} string "Invalid request parameters"
+// Failure 404 {string} string "Entity not found"
+// Failure 500 {string} string "Internal server error"
+// @Router /{account}/id/{id} [get]
 func (s *server) GetEntityHandler() http.HandlerFunc {
 	return s.HandleGetEntityReq(s.services.BaseService)
 }
 
-// DeleteEntityHandler handles DELETE requests for deleting an entity by ID.
+// DeleteEntityHandler handles DELETE requests for deleting an entity by ID
+// @Summary Delete entity by ID
+// @Description Permanently deletes an entity from BlueCat. Only certain entity types can be deleted
+// @Tags Entity Management
+// @Param account path string true "Account identifier"
+// @Param id path int true "Entity ID"
+// @Success 204 "Entity deleted successfully"
+// @Failure 400 {string} string "Invalid request parameters"
+// @Failure 403 {string} string "Delete operation not allowed"
+// @Failure 404 {string} string "Entity not found"
+// @Failure 500 {string} string "Internal server error"
+// @Router /{account}/id/{id} [delete]
 func (s *server) DeleteEntityHandler() http.HandlerFunc {
 	return s.HandleDeleteEntityReq(s.services.BaseService)
 }
 
+// CustomSearchHandler performs custom search across different entity types
+// @Summary Custom entity search
+// @Description Search for entities using flexible filters and type-specific criteria. Supports searching across IP blocks, networks, addresses, and DNS records
+// @Tags Entity Management
+// @Produce json
+// @Param account path string true "Account identifier"
+// @Param type query string true "Entity type to search for" Enums(IP4Block IP4Network, IP4Address, GenericRecord, HostRecord)
+// @Param filters query string true "Search filters in format 'key1=value1|key2=value2'"
+// @Param offset query int false "Number of records to skip for pagination" default(0)
+// @Param limit query int false "Maximum number of records to return" default(100)
+// @Success 200 {array} models.Entity "List of matching entities"
+// @Failure 400 {string} string "Invalid request parameters or unsupported entity type"
+// @Failure 404 {string} string "No entities found matching the search criteria"
+// @Failure 500 {string} string "Internal server error"
+// @Router /{account}/search [get]
 func (s *server) CustomSearchHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("CustomSearchHandler started")
 
