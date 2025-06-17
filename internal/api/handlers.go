@@ -41,7 +41,7 @@ func (s *server) HomeHandler(w http.ResponseWriter, _ *http.Request) {
 // @Description Performs a basic health check to verify the API is running
 // @Tags Health
 // @Produce json
-// @Success 200 {string} string "Returns 'pong' to indicate the service is healthy"
+// @Success 200 "Returns 'pong' to indicate the service is healthy"
 // @Router /ping [get]
 func (s *server) PingHandler(w http.ResponseWriter, _ *http.Request) {
 	logger.Debug("Ping/Pong")
@@ -67,7 +67,7 @@ func (s *server) VersionHandler(w http.ResponseWriter, _ *http.Request) {
 // @Tags System
 // @Produce json
 // @Success 200 {object} map[string]string "BlueCat system information as key-value pairs"
-// @Failure 500 {string} string "Internal server error if the request fails"
+// @Failure 500 "Internal server error if the request fails"
 // @Router /systeminfo [get]
 func (s *server) SystemInfoHandler(w http.ResponseWriter, _ *http.Request) {
 	body, err := s.MakeRequest("GET", "/getSystemInfo", "", nil)

@@ -95,9 +95,9 @@ func parseCustomSearchParams(r *http.Request) (*CustomSearchParams, error) {
 // @Param id path int true "Entity ID"
 // @Param includeHA query bool false "Include high availability information" default(true)
 // @Success 200 {object} models.Entity "Entity details"
-// Failure 400 {string} string "Invalid request parameters"
-// Failure 404 {string} string "Entity not found"
-// Failure 500 {string} string "Internal server error"
+// Failure 400 "Invalid request parameters"
+// Failure 404 "Entity not found"
+// Failure 500 "Internal server error"
 // @Router /{account}/id/{id} [get]
 func (s *server) GetEntityHandler() http.HandlerFunc {
 	return s.HandleGetEntityReq(s.services.BaseService)
@@ -110,10 +110,10 @@ func (s *server) GetEntityHandler() http.HandlerFunc {
 // @Param account path string true "Account identifier"
 // @Param id path int true "Entity ID"
 // @Success 204 "Entity deleted successfully"
-// @Failure 400 {string} string "Invalid request parameters"
-// @Failure 403 {string} string "Delete operation not allowed"
-// @Failure 404 {string} string "Entity not found"
-// @Failure 500 {string} string "Internal server error"
+// @Failure 400 "Invalid request parameters"
+// @Failure 403 "Delete operation not allowed"
+// @Failure 404 "Entity not found"
+// @Failure 500 "Internal server error"
 // @Router /{account}/id/{id} [delete]
 func (s *server) DeleteEntityHandler() http.HandlerFunc {
 	return s.HandleDeleteEntityReq(s.services.BaseService)
@@ -130,9 +130,9 @@ func (s *server) DeleteEntityHandler() http.HandlerFunc {
 // @Param offset query int false "Number of records to skip for pagination" default(0)
 // @Param limit query int false "Maximum number of records to return" default(100)
 // @Success 200 {array} models.Entity "List of matching entities"
-// @Failure 400 {string} string "Invalid request parameters or unsupported entity type"
-// @Failure 404 {string} string "No entities found matching the search criteria"
-// @Failure 500 {string} string "Internal server error"
+// @Failure 400 "Invalid request parameters or unsupported entity type"
+// @Failure 404 "No entities found matching the search criteria"
+// @Failure 500 "Internal server error"
 // @Router /{account}/search [get]
 func (s *server) CustomSearchHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("CustomSearchHandler started")
