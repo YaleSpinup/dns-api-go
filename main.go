@@ -21,10 +21,11 @@ import (
 	"encoding/base64"
 	"flag"
 	"fmt"
-	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"os"
+
+	"go.uber.org/zap"
 
 	"dns-api-go/internal/api"
 	"dns-api-go/internal/common"
@@ -34,7 +35,7 @@ import (
 
 var (
 	// Version is the main version number
-	Version = "0.0.0"
+	Version = "1.0.0"
 
 	// Buildstamp is the timestamp the binary was built, it should be set at buildtime with ldflags
 	Buildstamp = "No BuildStamp Provided"
@@ -45,6 +46,27 @@ var (
 	configFileName = flag.String("config", "config/config.json", "Configuration file.")
 	version        = flag.Bool("version", false, "Display version information and exit.")
 )
+
+// @title Spinup – DNS API
+// @version 1.0.0
+// @description REST API for managing DNS records, IP addresses, and network resources. This service acts as an intermediary between Spinup and BlueCat's DNS/DHCP/IPAM system.
+// @termsOfService https://yaleits.atlassian.net/wiki/spaces/CSSD/pages/1625129002/Shared+Security+Responsibility+Model+for+AWS+Access
+
+// @contact.name API Support
+// @contact.url https://yale.service-now.com/
+// @contact.email cloudeng@yale.edu
+
+// @license.name				GNU Affero General Public License v3.0
+// @license.url					https://www.gnu.org/licenses/agpl-3.0.html
+
+// @host localhost:8080
+// @BasePath /v2/dns
+
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name X-Auth-Token
+// @description Hashed token authentication that gets passed along with request.
+// @Security ApiKeyAuth
 
 func main() {
 	flag.Parse()
