@@ -6,10 +6,11 @@ import (
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux"
-	"go.uber.org/zap"
 	"net"
 	"net/http"
+
+	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 )
 
 type IpAddressParams struct {
@@ -17,12 +18,12 @@ type IpAddressParams struct {
 }
 
 type AssignIpAddressParams struct {
-	MacAddress  string `json:"mac"`
-	ParentId    int    `json:"network_id"`
-	Hostname    string `json:"hostname"`
-	ReverseFlag bool   `json:"reverse"`
-	CIDR        string `json:"cidr"`
-	Properties  string `json:"properties"`
+	MacAddress  string `json:"mac" example:"00:11:22:33:44:55"`
+	ParentId    int    `json:"network_id" example:"12345"`
+	Hostname    string `json:"hostname" example:"server-001"`
+	ReverseFlag bool   `json:"reverse" example:"true"`
+	CIDR        string `json:"cidr" example:"10.0.1.0/24"`
+	Properties  string `json:"properties" example:"department=IT|environment=prod"`
 }
 
 // parseIpAddressParams parses and validates the parameters from the request.
@@ -131,7 +132,18 @@ func incrementIP(ip net.IP) {
 	}
 }
 
-// GetIpAddressHandler retrieves an ip address entity from the database
+// GetIpAddressHandler retrieves an IP address entity from BlueCat
+// @Summary Get IP address details
+// @Description Retrieves detailed information about a specific IP address including its properties and allocation status
+// @Tags IP Address Management
+// @Produce json
+// @Param account path string true "Account identifier"
+// @Param ip path string true "IP address" format(ipv4)
+// @Success 200 {object} models.Entity "IP address details"
+// @Failure 400 "Invalid request parameters"
+// @Failure 404 "IP address not found"
+// @Failure 500 "Internal server error"
+// @Router /{account}/ips/{ip} [get]
 func (s *server) GetIpAddressHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("GetIpAddressHandler started")
 
@@ -165,7 +177,19 @@ func (s *server) GetIpAddressHandler(w http.ResponseWriter, r *http.Request) {
 	s.respond(w, entity, http.StatusOK)
 }
 
-// DeleteIpAddressHandler deletes an ip address entity from the bluecat
+// DeleteIpAddressHandler deletes an IP address entity from BlueCat
+// @Summary Delete IP address
+// @Description Permanently deletes an IP address allocation from BlueCat, freeing it for reuse
+// @Tags IP Address Management
+// @Param account path string true "Account identifier"
+// @Param ip path string true "IP address to delete" format(ipv4)
+// @Success 204 "IP address successfully deleted"
+// @Failure 400 "Invalid request parameters"
+// @Failure 403 "Delete operation not allowed"
+// @Failure 404 "IP address not found"
+// @Failure 409 "Entity type mismatch"
+// @Failure 500 "Internal server error"
+// @Router /{account}/ips/{ip} [delete]
 func (s *server) DeleteIpAddressHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("DeleteIpAddressHandler started")
 
@@ -205,7 +229,18 @@ func (s *server) DeleteIpAddressHandler(w http.ResponseWriter, r *http.Request) 
 
 }
 
-// AssignIpAddressHandler assigns the next available ipv4 address to a host in bluecat
+// AssignIpAddressHandler assigns the next available IPv4 address to a host in BlueCat
+// @Summary Assign next available IP address
+// @Description Assigns the next available IPv4 address in the specified network to a host with the given MAC address and hostname. Creates associated DNS records if requested.
+// @Tags IP Address Management
+// @Accept json
+// @Produce json
+// @Param account path string true "Account identifier"
+// @Param request body AssignIpAddressParams true "IP assignment parameters"
+// @Success 200 {object} map[string]interface{} "Successfully assigned IP address with details"
+// @Failure 400 "Invalid request parameters or malformed request body"
+// @Failure 500 "Internal server error or IP assignment failed"
+// @Router /{account}/ips [post]
 func (s *server) AssignIpAddressHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("AssignIpAddressHandler started")
 
@@ -260,7 +295,15 @@ func (s *server) AssignIpAddressHandler(w http.ResponseWriter, r *http.Request) 
 	s.respond(w, entityWithIP, http.StatusOK)
 }
 
-// GetCIDRHandler retrieves the CIDR file from the server
+// GetCIDRHandler retrieves the CIDR configuration file from the server
+// @Summary Get CIDR configuration
+// @Description Retrieves the CIDR configuration file containing network ranges and allocation information
+// @Tags IP Address Management
+// @Produce json
+// @Param account path string true "Account identifier"
+// @Success 200 {object} map[string]interface{} "CIDR configuration data"
+// @Failure 500 "Internal server error or CIDR file not found"
+// @Router /{account}/ips/cidrs [get]
 func (s *server) GetCIDRHandler(w http.ResponseWriter, _ *http.Request) {
 	logger.Info("GetCIDRHandler started")
 
