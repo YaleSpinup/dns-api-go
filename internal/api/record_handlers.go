@@ -6,10 +6,11 @@ import (
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
-	"go.uber.org/zap"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 type GetRecordsByTypeParams struct {
@@ -22,17 +23,42 @@ type GetRecordsByTypeParams struct {
 }
 
 type CreateRecordParams struct {
-	RecordType string `json:"type"`
-	RecordName string `json:"record"`
-	Target     string `json:"target"`
-	Properties string `json:"properties"`
-	Ttl        int    `json:"ttl"`
+	RecordType string `json:"type" example:"HostRecord"`
+	RecordName string `json:"record" example:"server-001.yale.edu"`
+	Target     string `json:"target" example:"10.0.1.15"`
+	Properties string `json:"properties" example:"department=IT|environment=prod"`
+	Ttl        int    `json:"ttl" example:"300"`
 }
 
+// GetRecordHandler retrieves a specific DNS record by ID
+// @Summary Get DNS record by ID
+// @Description Retrieves detailed information about a specific DNS record using its unique identifier
+// @Tags DNS Record Management
+// @Produce json
+// @Param account path string true "Account identifier"
+// @Param id path int true "Record ID"
+// @Param includeHA query bool false "Include high availability information" default(true)
+// @Success 200 {object} models.Entity "DNS record details"
+// @Failure 400 "Invalid request parameters"
+// @Failure 404 "DNS record not found"
+// @Failure 500 "Internal server error"
+// @Router /{account}/records/{id} [get]
 func (s *server) GetRecordHandler() http.HandlerFunc {
 	return s.HandleGetEntityReq(s.services.RecordService)
 }
 
+// DeleteRecordHandler deletes a DNS record by ID
+// @Summary Delete DNS record by ID
+// @Description Permanently deletes a DNS record from BlueCat using its unique identifier
+// @Tags DNS Record Management
+// @Param account path string true "Account identifier"
+// @Param id path int true "Record ID"
+// @Success 204 "DNS record successfully deleted"
+// @Failure 400 "Invalid request parameters"
+// @Failure 403 "Delete operation not allowed"
+// @Failure 404 "DNS record not found"
+// @Failure 500 "Internal server error"
+// @Router /{account}/records/{id} [delete]
 func (s *server) DeleteRecordHandler() http.HandlerFunc {
 	return s.HandleDeleteEntityReq(s.services.RecordService)
 }
@@ -122,7 +148,7 @@ func parseCreateRecordParams(r *http.Request) (*CreateRecordParams, error) {
 		return nil, fmt.Errorf("missing required parameter: type")
 	}
 	// Make sure record type of either HostRecord, AliasRecord, or ExternalHostRecord
-	if common.Contains([]string{"HostRecord", "AliasRecord", "ExternalHostRecord"}, Params.RecordType) == false {
+	if !common.Contains([]string{"HostRecord", "AliasRecord", "ExternalHostRecord"}, Params.RecordType) {
 		return nil, fmt.Errorf("invalid record type")
 	}
 
@@ -139,6 +165,23 @@ func parseCreateRecordParams(r *http.Request) (*CreateRecordParams, error) {
 	return &Params, nil
 }
 
+// GetRecordsHandler retrieves DNS records by type with filtering options
+// @Summary Get DNS records by type
+// @Description Retrieves a list of DNS records filtered by record type with support for various search criteria and pagination
+// @Tags DNS Record Management
+// @Produce json
+// @Param account path string true "Account identifier"
+// @Param type query string true "DNS record type" Enums(HostRecord,AliasRecord,ExternalHostRecord)
+// @Param hint query string false "Search hint to filter records"
+// @Param name query string false "Specific record name to search for"
+// @Param keyword query string false "Keyword to search within record names"
+// @Param offset query int false "Number of records to skip for pagination" default(0)
+// @Param limit query int false "Maximum number of records to return" default(10)
+// @Success 200 {array} models.Entity "List of DNS records"
+// @Failure 400 "Invalid request parameters or unsupported record type"
+// @Failure 404 "No records found matching the criteria"
+// @Failure 500 "Internal server error"
+// @Router /{account}/records [get]
 func (s *server) GetRecordsHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("GetRecordsHandler started")
 
@@ -186,6 +229,19 @@ func (s *server) GetRecordsHandler(w http.ResponseWriter, r *http.Request) {
 	s.respond(w, entities, http.StatusOK)
 }
 
+// CreateRecordHandler creates a new DNS record in BlueCat
+// @Summary Create DNS record
+// @Description Creates a new DNS record in BlueCat. Supports HostRecord (A record), AliasRecord (CNAME), and ExternalHostRecord types
+// @Tags DNS Record Management
+// @Accept json
+// @Produce json
+// @Param account path string true "Account identifier"
+// @Param request body CreateRecordParams true "DNS record creation parameters"
+// @Success 201 {object} models.Entity "Successfully created DNS record"
+// @Failure 400 "Invalid request parameters, unsupported record type, or malformed request body"
+// @Failure 409 "DNS record already exists"
+// @Failure 500 "Internal server error"
+// @Router /{account}/records [post]
 func (s *server) CreateRecordHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("CreateRecordHandler started")
 
