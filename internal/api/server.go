@@ -23,14 +23,15 @@ import (
 	"dns-api-go/logger"
 	"encoding/json"
 	"errors"
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
-	"go.uber.org/zap"
 	"math/rand"
 	"net/http"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -47,12 +48,6 @@ type apiVersion struct {
 	BuildStamp string `json:"buildstamp"`
 }
 
-type proxyBackend struct {
-	baseUrl string
-	token   string
-	prefix  string
-}
-
 type bluecat struct {
 	account   string
 	baseUrl   string
@@ -64,19 +59,18 @@ type bluecat struct {
 }
 
 type Services struct {
-	BaseService *services.BaseService
-	ZoneService *services.ZoneService
-	NetworkService *services.NetworkService
+	BaseService       *services.BaseService
+	ZoneService       *services.ZoneService
+	NetworkService    *services.NetworkService
 	MacAddressService *services.MacAddressService
-	IpAddressService *services.IpAddressService
-	RecordService *services.RecordService
+	IpAddressService  *services.IpAddressService
+	RecordService     *services.RecordService
 }
 
 type server struct {
 	router   *mux.Router
 	version  *apiVersion
 	context  context.Context
-	backend  *proxyBackend
 	bluecat  *bluecat
 	org      string
 	services Services
@@ -127,21 +121,12 @@ func NewServer(config common.Config) error {
 	ipAddressService := services.NewIpAddressService(&s)
 	recordService := services.NewRecordService(&s)
 	s.services = Services{
-		BaseService: baseService,
-		ZoneService: zoneService,
-		NetworkService: networkService,
+		BaseService:       baseService,
+		ZoneService:       zoneService,
+		NetworkService:    networkService,
 		MacAddressService: macAddressService,
-		IpAddressService: ipAddressService,
-		RecordService: recordService,
-	}
-
-	if b := config.ProxyBackend; b != nil {
-		logger.Debug("configuring proxy backend", zap.String("baseUrl", b.BaseUrl))
-		s.backend = &proxyBackend{
-			baseUrl: b.BaseUrl,
-			token:   b.Token,
-			prefix:  b.BackendPrefix,
-		}
+		IpAddressService:  ipAddressService,
+		RecordService:     recordService,
 	}
 
 	publicURLs := map[string]string{
