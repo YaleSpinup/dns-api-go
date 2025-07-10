@@ -1,7 +1,1150 @@
 {
     "swagger": "2.0",
     "info": {
-        "contact": {}
+        "description": "REST API for managing DNS records, IP addresses, and network resources. This service acts as an intermediary between Spinup and BlueCat's DNS/DHCP/IPAM system.",
+        "title": "Spinup – DNS API",
+        "termsOfService": "https://yaleits.atlassian.net/wiki/spaces/CSSD/pages/1625129002/Shared+Security+Responsibility+Model+for+AWS+Access",
+        "contact": {
+            "name": "API Support",
+            "url": "https://yale.service-now.com/",
+            "email": "cloudeng@yale.edu"
+        },
+        "license": {
+            "name": "GNU Affero General Public License v3.0",
+            "url": "https://www.gnu.org/licenses/agpl-3.0.html"
+        },
+        "version": "1.0.0"
     },
-    "paths": {}
+    "host": "localhost:8080",
+    "basePath": "/v2/dns",
+    "paths": {
+        "/": {
+            "get": {
+                "description": "Returns the BlueCat account configured for this DNS API instance",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "General"
+                ],
+                "summary": "Get account information",
+                "responses": {
+                    "200": {
+                        "description": "List containing the configured account name",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/ping": {
+            "get": {
+                "description": "Performs a basic health check to verify the API is running",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Health check endpoint",
+                "responses": {
+                    "200": {
+                        "description": "Returns 'pong' to indicate the service is healthy"
+                    }
+                }
+            }
+        },
+        "/systeminfo": {
+            "get": {
+                "description": "Retrieves system information from the connected BlueCat instance",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "Get BlueCat system information",
+                "responses": {
+                    "200": {
+                        "description": "BlueCat system information as key-value pairs",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error if the request fails"
+                    }
+                }
+            }
+        },
+        "/version": {
+            "get": {
+                "description": "Returns version, build timestamp, and git commit information for the API",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "General"
+                ],
+                "summary": "Get API version information",
+                "responses": {
+                    "200": {
+                        "description": "API version information",
+                        "schema": {
+                            "$ref": "#/definitions/api.apiVersion"
+                        }
+                    }
+                }
+            }
+        },
+        "/{account}/id/{id}": {
+            "get": {
+                "description": "Retrieves detailed information about a specific entity using its unique identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Entity Management"
+                ],
+                "summary": "Get entity by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Entity ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Include high availability information",
+                        "name": "includeHA",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Entity details",
+                        "schema": {
+                            "$ref": "#/definitions/models.Entity"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Permanently deletes an entity from BlueCat. Only certain entity types can be deleted",
+                "tags": [
+                    "Entity Management"
+                ],
+                "summary": "Delete entity by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Entity ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Entity deleted successfully"
+                    },
+                    "400": {
+                        "description": "Invalid request parameters"
+                    },
+                    "403": {
+                        "description": "Delete operation not allowed"
+                    },
+                    "404": {
+                        "description": "Entity not found"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        },
+        "/{account}/ips": {
+            "post": {
+                "description": "Assigns the next available IPv4 address in the specified network to a host with the given MAC address and hostname. Creates associated DNS records if requested.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "IP Address Management"
+                ],
+                "summary": "Assign next available IP address",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "IP assignment parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.AssignIpAddressParams"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully assigned IP address with details",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters or malformed request body"
+                    },
+                    "500": {
+                        "description": "Internal server error or IP assignment failed"
+                    }
+                }
+            }
+        },
+        "/{account}/ips/cidrs": {
+            "get": {
+                "description": "Retrieves the CIDR configuration file containing network ranges and allocation information",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "IP Address Management"
+                ],
+                "summary": "Get CIDR configuration",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CIDR configuration data",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error or CIDR file not found"
+                    }
+                }
+            }
+        },
+        "/{account}/ips/{ip}": {
+            "get": {
+                "description": "Retrieves detailed information about a specific IP address including its properties and allocation status",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "IP Address Management"
+                ],
+                "summary": "Get IP address details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "ipv4",
+                        "description": "IP address",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "IP address details",
+                        "schema": {
+                            "$ref": "#/definitions/models.Entity"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters"
+                    },
+                    "404": {
+                        "description": "IP address not found"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            },
+            "delete": {
+                "description": "Permanently deletes an IP address allocation from BlueCat, freeing it for reuse",
+                "tags": [
+                    "IP Address Management"
+                ],
+                "summary": "Delete IP address",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "ipv4",
+                        "description": "IP address to delete",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "IP address successfully deleted"
+                    },
+                    "400": {
+                        "description": "Invalid request parameters"
+                    },
+                    "403": {
+                        "description": "Delete operation not allowed"
+                    },
+                    "404": {
+                        "description": "IP address not found"
+                    },
+                    "409": {
+                        "description": "Entity type mismatch"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        },
+        "/{account}/macs": {
+            "post": {
+                "description": "Creates a new MAC address entry in BlueCat and associates it with the specified MAC pool",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "MAC Address Management"
+                ],
+                "summary": "Create MAC address",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "MAC address creation parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.MacParams"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Created MAC address object ID",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters, MAC address format, or pool ID"
+                    },
+                    "409": {
+                        "description": "MAC address already exists"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        },
+        "/{account}/macs/{mac}": {
+            "get": {
+                "description": "Retrieves detailed information about a specific MAC address including its pool association and properties",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "MAC Address Management"
+                ],
+                "summary": "Get MAC address details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "MAC address in format XX:XX:XX:XX:XX:XX",
+                        "name": "mac",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "MAC address details",
+                        "schema": {
+                            "$ref": "#/definitions/models.Entity"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters or MAC address format"
+                    },
+                    "404": {
+                        "description": "MAC address not found"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            },
+            "put": {
+                "description": "Updates the properties and pool association of an existing MAC address",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "MAC Address Management"
+                ],
+                "summary": "Update MAC address",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "MAC address to update in format XX:XX:XX:XX:XX:XX",
+                        "name": "mac",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "MAC address update parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.MacParams"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "MAC address successfully updated"
+                    },
+                    "400": {
+                        "description": "Invalid request parameters, MAC address format, or pool ID"
+                    },
+                    "404": {
+                        "description": "MAC address not found"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        },
+        "/{account}/networks": {
+            "get": {
+                "description": "Retrieves a list of IPv4 networks from BlueCat based on a search hint with pagination support",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Network Management"
+                ],
+                "summary": "Get networks by hint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search hint to filter networks (e.g., network name or IP range)",
+                        "name": "hint",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Number of records to skip for pagination",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Maximum number of records to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of network entities",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Entity"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        },
+        "/{account}/networks/{id}": {
+            "get": {
+                "description": "Retrieves detailed information about a specific IPv4 network using its unique identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Network Management"
+                ],
+                "summary": "Get network by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Network ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Include high availability information",
+                        "name": "includeHA",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Network details",
+                        "schema": {
+                            "$ref": "#/definitions/models.Entity"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters"
+                    },
+                    "404": {
+                        "description": "Network not found"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        },
+        "/{account}/records": {
+            "get": {
+                "description": "Retrieves a list of DNS records filtered by record type with support for various search criteria and pagination",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "DNS Record Management"
+                ],
+                "summary": "Get DNS records by type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "HostRecord",
+                            "AliasRecord",
+                            "ExternalHostRecord"
+                        ],
+                        "type": "string",
+                        "description": "DNS record type",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search hint to filter records",
+                        "name": "hint",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Specific record name to search for",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Keyword to search within record names",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Number of records to skip for pagination",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Maximum number of records to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of DNS records",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Entity"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters or unsupported record type"
+                    },
+                    "404": {
+                        "description": "No records found matching the criteria"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a new DNS record in BlueCat. Supports HostRecord (A record), AliasRecord (CNAME), and ExternalHostRecord types",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "DNS Record Management"
+                ],
+                "summary": "Create DNS record",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "DNS record creation parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.CreateRecordParams"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Successfully created DNS record",
+                        "schema": {
+                            "$ref": "#/definitions/models.Entity"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters, unsupported record type, or malformed request body"
+                    },
+                    "409": {
+                        "description": "DNS record already exists"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        },
+        "/{account}/records/{id}": {
+            "get": {
+                "description": "Retrieves detailed information about a specific DNS record using its unique identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "DNS Record Management"
+                ],
+                "summary": "Get DNS record by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Record ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Include high availability information",
+                        "name": "includeHA",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "DNS record details",
+                        "schema": {
+                            "$ref": "#/definitions/models.Entity"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters"
+                    },
+                    "404": {
+                        "description": "DNS record not found"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            },
+            "delete": {
+                "description": "Permanently deletes a DNS record from BlueCat using its unique identifier",
+                "tags": [
+                    "DNS Record Management"
+                ],
+                "summary": "Delete DNS record by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Record ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "DNS record successfully deleted"
+                    },
+                    "400": {
+                        "description": "Invalid request parameters"
+                    },
+                    "403": {
+                        "description": "Delete operation not allowed"
+                    },
+                    "404": {
+                        "description": "DNS record not found"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        },
+        "/{account}/search": {
+            "get": {
+                "description": "Search for entities using flexible filters and type-specific criteria. Supports searching across IP blocks, networks, addresses, and DNS records",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Entity Management"
+                ],
+                "summary": "Custom entity search",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "IP4Block IP4Network",
+                            "IP4Address",
+                            "GenericRecord",
+                            "HostRecord"
+                        ],
+                        "type": "string",
+                        "description": "Entity type to search for",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search filters in format 'key1=value1|key2=value2'",
+                        "name": "filters",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Number of records to skip for pagination",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 100,
+                        "description": "Maximum number of records to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of matching entities",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Entity"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters or unsupported entity type"
+                    },
+                    "404": {
+                        "description": "No entities found matching the search criteria"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        },
+        "/{account}/zones": {
+            "get": {
+                "description": "Retrieves a list of DNS zones from BlueCat based on a search hint with pagination support",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Zone Management"
+                ],
+                "summary": "Get DNS zones by hint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search hint to filter zones (e.g., zone name or domain)",
+                        "name": "hint",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Number of records to skip for pagination",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Maximum number of records to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of zone entities",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Entity"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        },
+        "/{account}/zones/{id}": {
+            "get": {
+                "description": "Retrieves detailed information about a specific DNS zone using its unique identifier",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Zone Management"
+                ],
+                "summary": "Get DNS zone by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "account",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Zone ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Include high availability information",
+                        "name": "includeHA",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Zone details",
+                        "schema": {
+                            "$ref": "#/definitions/models.Entity"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters"
+                    },
+                    "404": {
+                        "description": "Zone not found"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "api.AssignIpAddressParams": {
+            "type": "object",
+            "properties": {
+                "cidr": {
+                    "type": "string",
+                    "example": "10.0.1.0/24"
+                },
+                "hostname": {
+                    "type": "string",
+                    "example": "server-001"
+                },
+                "mac": {
+                    "type": "string",
+                    "example": "00:11:22:33:44:55"
+                },
+                "network_id": {
+                    "type": "integer",
+                    "example": 12345
+                },
+                "properties": {
+                    "type": "string",
+                    "example": "department=IT|environment=prod"
+                },
+                "reverse": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "api.CreateRecordParams": {
+            "type": "object",
+            "properties": {
+                "properties": {
+                    "type": "string",
+                    "example": "department=IT|environment=prod"
+                },
+                "record": {
+                    "type": "string",
+                    "example": "server-001.yale.edu"
+                },
+                "target": {
+                    "type": "string",
+                    "example": "10.0.1.15"
+                },
+                "ttl": {
+                    "type": "integer",
+                    "example": 300
+                },
+                "type": {
+                    "type": "string",
+                    "example": "HostRecord"
+                }
+            }
+        },
+        "api.MacParams": {
+            "type": "object",
+            "properties": {
+                "mac": {
+                    "type": "string",
+                    "example": "00:11:22:33:44:55"
+                },
+                "macpool": {
+                    "type": "integer",
+                    "example": 12345
+                },
+                "properties": {
+                    "type": "string",
+                    "example": "department=IT|environment=prod"
+                }
+            }
+        },
+        "api.apiVersion": {
+            "type": "object",
+            "properties": {
+                "buildstamp": {
+                    "description": "The build timestamp of the API",
+                    "type": "string"
+                },
+                "githash": {
+                    "description": "The git hash of the API",
+                    "type": "string"
+                },
+                "version": {
+                    "description": "The version of the API",
+                    "type": "string"
+                }
+            }
+        },
+        "models.Entity": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "example": 12345
+                },
+                "name": {
+                    "type": "string"
+                },
+                "properties": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "example": {
+                        "address": "10.0.1.15|ttl:3600"
+                    }
+                },
+                "type": {
+                    "type": "string",
+                    "example": "HostRecord"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "ApiKeyAuth": {
+            "description": "Hashed token authentication that gets passed along with request.",
+            "type": "apiKey",
+            "name": "X-Auth-Token",
+            "in": "header"
+        }
+    }
 }
