@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
+	"net/url"
 )
 
 type IpAddressEntityService interface {
@@ -108,7 +109,7 @@ func (ips *IpAddressService) AssignIpAddress(action string, macAddress string, p
 	// Send http request to bluecat
 	route := "/assignNextAvailableIP4Address"
 	params := fmt.Sprintf("action=%s&configurationId=%d&hostInfo=%s&macAddress=%s&parentId=%d&properties=%s",
-		action, configId, hostInfoString, macAddress, parentId, propertiesString)
+		action, configId, url.QueryEscape(hostInfoString), url.QueryEscape(macAddress), parentId, url.QueryEscape(propertiesString))
 	resp, err := ips.server.MakeRequest("POST", route, params, nil)
 	if err != nil {
 		return nil, err

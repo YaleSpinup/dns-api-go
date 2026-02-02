@@ -184,7 +184,7 @@ func validateMacAddress(macAddress string) error {
 
 	// Validate the MAC address format
 	if !re.MatchString(macAddress) {
-		return fmt.Errorf("invalid MAC address format. MAC address should be in the format: nnnnnnnnnnnn or nn:nn:nn:nn:nn:nn or nn-nn-nn-nn-nn-nn")
+		return fmt.Errorf("invalid MAC address format '%s'. MAC address should be in the format: nnnnnnnnnnnn or nn:nn:nn:nn:nn:nn or nn-nn-nn-nn-nn-nn", macAddress)
 	}
 
 	return nil

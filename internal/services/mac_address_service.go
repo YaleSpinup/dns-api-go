@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
+	"net/url"
 )
 
 type MacAddressEntityService interface {
@@ -36,7 +37,7 @@ func (ms *MacAddressService) GetMacAddress(macAddress string) (*models.Entity, e
 	}
 
 	// Send http request to bluecat
-	route, params := "/getMACAddress", fmt.Sprintf("configurationId=%d&macAddress=%s", configId, macAddress)
+	route, params := "/getMACAddress", fmt.Sprintf("configurationId=%d&macAddress=%s", configId, url.QueryEscape(macAddress))
 	resp, err := ms.server.MakeRequest("GET", route, params, nil)
 	if err != nil {
 		return nil, err
@@ -103,8 +104,8 @@ func (ms *MacAddressService) AddMacAddress(mac models.Mac, configId int) (int, e
 
 	// Send request to bluecat
 	route, params := "/addMACAddress", fmt.Sprintf("configurationId=%d&macAddress=%s",
-		configId, mac.Address)
-	params += "&properties=" + common.ConvertToSeparatedString(mac.Properties, "|")
+		configId, url.QueryEscape(mac.Address))
+	params += "&properties=" + url.QueryEscape(common.ConvertToSeparatedString(mac.Properties, "|"))
 	resp, err := ms.server.MakeRequest("POST", route, params, nil)
 	if err != nil {
 		return -1, err
@@ -127,7 +128,7 @@ func (ms *MacAddressService) AssociateMacAddress(mac models.Mac, configId int) e
 
 	// Send request to bluecat
 	route, params := "/associateMACAddressWithPool", fmt.Sprintf("configurationId=%d&macAddress=%s&poolId=%d",
-		configId, mac.Address, mac.PoolId)
+		configId, url.QueryEscape(mac.Address), mac.PoolId)
 	resp, err := ms.server.MakeRequest("POST", route, params, nil)
 	if err != nil {
 		return &PoolIDError{PoolID: mac.PoolId, Err: err}
