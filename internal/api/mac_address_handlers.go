@@ -7,9 +7,10 @@ import (
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
+	"net/http"
+
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
-	"net/http"
 )
 
 type MacAddressParams struct {
@@ -17,9 +18,9 @@ type MacAddressParams struct {
 }
 
 type MacParams struct {
-	Address    string `json:"mac"`
-	PoolId     int    `json:"macpool"`
-	Properties string `json:"properties"`
+	Address    string `json:"mac" example:"00:11:22:33:44:55"`
+	PoolId     int    `json:"macpool" example:"12345"`
+	Properties string `json:"properties" example:"department=IT|environment=prod"`
 }
 
 // parseMacAddressParams parses and validates the parameters from the request.
@@ -86,7 +87,18 @@ func parseUpdateMacParams(r *http.Request) (*MacParams, error) {
 	return &MacParams, nil
 }
 
-// GetMacAddressHandler handles GET requests for retrieving a mac address by address.
+// GetMacAddressHandler retrieves a MAC address entity from BlueCat
+// @Summary Get MAC address details
+// @Description Retrieves detailed information about a specific MAC address including its pool association and properties
+// @Tags MAC Address Management
+// @Produce json
+// @Param account path string true "Account identifier"
+// @Param mac path string true "MAC address in format XX:XX:XX:XX:XX:XX"
+// @Success 200 {object} models.Entity "MAC address details"
+// @Failure 400 "Invalid request parameters or MAC address format"
+// @Failure 404 "MAC address not found"
+// @Failure 500 "Internal server error"
+// @Router /{account}/macs/{mac} [get]
 func (s *server) GetMacAddressHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse the mac parameters from the request
 	params, err := parseMacAddressParams(r)
@@ -115,7 +127,19 @@ func (s *server) GetMacAddressHandler(w http.ResponseWriter, r *http.Request) {
 	s.respond(w, entity, http.StatusOK)
 }
 
-// CreateMacAddressHandler handles POST requests for creating a mac address.
+// CreateMacAddressHandler creates a new MAC address in BlueCat
+// @Summary Create MAC address
+// @Description Creates a new MAC address entry in BlueCat and associates it with the specified MAC pool
+// @Tags MAC Address Management
+// @Accept json
+// @Produce json
+// @Param account path string true "Account identifier"
+// @Param request body MacParams true "MAC address creation parameters"
+// @Success 200 {object} map[string]interface{} "Created MAC address object ID"
+// @Failure 400 "Invalid request parameters, MAC address format, or pool ID"
+// @Failure 409 "MAC address already exists"
+// @Failure 500 "Internal server error"
+// @Router /{account}/macs [post]
 func (s *server) CreateMacAddressHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse the mac parameters from the request
 	params, err := parseCreateMacParams(r)
@@ -154,7 +178,19 @@ func (s *server) CreateMacAddressHandler(w http.ResponseWriter, r *http.Request)
 	s.respond(w, objectId, http.StatusOK)
 }
 
-// UpdateMacAddressHandler handles PUT requests for updating a mac address.
+// UpdateMacAddressHandler updates an existing MAC address in BlueCat
+// @Summary Update MAC address
+// @Description Updates the properties and pool association of an existing MAC address
+// @Tags MAC Address Management
+// @Accept json
+// @Param account path string true "Account identifier"
+// @Param mac path string true "MAC address to update in format XX:XX:XX:XX:XX:XX"
+// @Param request body MacParams true "MAC address update parameters"
+// @Success 204 "MAC address successfully updated"
+// @Failure 400 "Invalid request parameters, MAC address format, or pool ID"
+// @Failure 404 "MAC address not found"
+// @Failure 500 "Internal server error"
+// @Router /{account}/macs/{mac} [put]
 func (s *server) UpdateMacAddressHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse the mac parameters from the request
 	params, err := parseUpdateMacParams(r)

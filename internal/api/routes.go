@@ -17,12 +17,16 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package api
 
 import (
+	_ "dns-api-go/docs"
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 func (s *server) routes() {
+	s.router.PathPrefix("/swagger/").Handler(httpSwagger.WrapHandler)
+
 	api := s.router.PathPrefix("/v2/dns").Subrouter()
 	api.HandleFunc("/ping", s.PingHandler).Methods(http.MethodGet)
 	api.HandleFunc("/version", s.VersionHandler).Methods(http.MethodGet)

@@ -18,17 +18,31 @@ package api
 
 import (
 	"dns-api-go/logger"
-	"go.uber.org/zap"
 	"net/http"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
+// HomeHandler returns the configured BlueCat account information
+// @Summary Get account information
+// @Description Returns the BlueCat account configured for this DNS API instance
+// @Tags General
+// @Produce json
+// @Success 200 {array} string "List containing the configured account name"
+// @Router / [get]
 func (s *server) HomeHandler(w http.ResponseWriter, _ *http.Request) {
 	account := []string{s.bluecat.account}
 	s.respond(w, account, http.StatusOK)
 }
 
-// PingHandler responds to ping requests
+// PingHandler responds to health check requests
+// @Summary Health check endpoint
+// @Description Performs a basic health check to verify the API is running
+// @Tags Health
+// @Produce json
+// @Success 200 "Returns 'pong' to indicate the service is healthy"
+// @Router /ping [get]
 func (s *server) PingHandler(w http.ResponseWriter, _ *http.Request) {
 	logger.Debug("Ping/Pong")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -36,11 +50,25 @@ func (s *server) PingHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 // VersionHandler responds to version requests
+// @Summary Get API version information
+// @Description Returns version, build timestamp, and git commit information for the API
+// @Tags General
+// @Produce json
+// @Success 200 {object} apiVersion "API version information"
+// @Router /version [get]
 func (s *server) VersionHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	s.respond(w, s.version, http.StatusOK)
 }
 
+// SystemInfoHandler retrieves Bluecat system information
+// @Summary Get BlueCat system information
+// @Description Retrieves system information from the connected BlueCat instance
+// @Tags System
+// @Produce json
+// @Success 200 {object} map[string]string "BlueCat system information as key-value pairs"
+// @Failure 500 "Internal server error if the request fails"
+// @Router /systeminfo [get]
 func (s *server) SystemInfoHandler(w http.ResponseWriter, _ *http.Request) {
 	body, err := s.MakeRequest("GET", "/getSystemInfo", "", nil)
 	if err != nil {

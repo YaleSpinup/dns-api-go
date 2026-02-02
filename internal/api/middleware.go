@@ -18,10 +18,12 @@ package api
 
 import (
 	"dns-api-go/logger"
-	"github.com/gorilla/mux"
-	"go.uber.org/zap"
 	"net/http"
 	"net/url"
+	"strings"
+
+	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -50,7 +52,21 @@ func TokenMiddleware(psk []byte, public map[string]string, h http.Handler) http.
 			return
 		}
 
+		// Check if the path is public (either exact match or prefix match)
+		isPublic := false
 		if _, ok := public[uri.Path]; ok {
+			isPublic = true
+		} else {
+			// Check for prefix matches (like /swagger/)
+			for publicPath := range public {
+				if strings.HasPrefix(uri.Path, publicPath) {
+					isPublic = true
+					break
+				}
+			}
+		}
+
+		if isPublic {
 			logger.Debug("Not authenticating for public URL", zap.String("path", uri.Path))
 		} else {
 			logger.Debug("Authenticating token for protected URL", zap.String("URL", r.URL.String()))
