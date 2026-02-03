@@ -28,18 +28,11 @@ import (
 type Config struct {
 	ListenAddress string
 	Token         string
-	ProxyBackend  *ProxyBackend
 	Bluecat       *Bluecat
 	LogLevel      string
 	Version       Version
 	Org           string
 	CIDRFile      string
-}
-
-type ProxyBackend struct {
-	BaseUrl       string
-	Token         string
-	BackendPrefix string
 }
 
 type Bluecat struct {
