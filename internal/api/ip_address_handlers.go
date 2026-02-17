@@ -51,9 +51,19 @@ func parseAssignIpAddressBody(s *server, ipAddressService services.IpAddressEnti
 		return nil, fmt.Errorf("failed to decode request body: %v", err)
 	}
 
-	// Validate the presence and format of the mac address
-	if err := validateMacAddress(AssignIpAddressParams.MacAddress); err != nil {
-		return nil, err
+	// Log the received parameters for debugging
+	logger.Info("Received AssignIpAddress request",
+		zap.String("mac", AssignIpAddressParams.MacAddress),
+		zap.Int("network_id", AssignIpAddressParams.ParentId),
+		zap.String("hostname", AssignIpAddressParams.Hostname),
+		zap.Bool("reverse", AssignIpAddressParams.ReverseFlag),
+		zap.String("cidr", AssignIpAddressParams.CIDR))
+
+	// Validate the format of the mac address if provided
+	if AssignIpAddressParams.MacAddress != "" {
+		if err := validateMacAddress(AssignIpAddressParams.MacAddress); err != nil {
+			return nil, err
+		}
 	}
 
 	// If there is no parent id provided, attempt to find it from the provided CIDR
