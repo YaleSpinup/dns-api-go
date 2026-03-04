@@ -238,22 +238,14 @@ func UpdateEntity(server interfaces.ServerInterface, entity *models.Entity) erro
 }
 
 // GetEntitiesByHintHelper retrieves entities by hint using V2 search.
-func GetEntitiesByHintHelper(server interfaces.ServerInterface, route string, start int, count int, options map[string]string) (*[]models.Entity, error) {
+func GetEntitiesByHintHelper(server interfaces.ServerInterface, resourceType string, start int, count int, options map[string]string) (*[]models.Entity, error) {
 	logger.Info("GetEntitiesByHint started",
 		zap.Int("start", start),
 		zap.Int("count", count),
 		zap.Any("options", options))
 
-	// Determine the V2 resource type from the V1 route
-	var v2Route string
-	switch route {
-	case "/getZonesByHint":
-		v2Route = "/api/v2/zones"
-	case "/getIP4NetworksByHint":
-		v2Route = "/api/v2/ipv4Networks"
-	default:
-		v2Route = "/api/v2/entities"
-	}
+	// V2: GET /api/v2/{resourceType}?filter=name:contains('{hint}')
+	v2Route := fmt.Sprintf("/api/v2/%s", resourceType)
 
 	// Build V2 query parameters
 	params := fmt.Sprintf("limit=%d&offset=%d", count, start)

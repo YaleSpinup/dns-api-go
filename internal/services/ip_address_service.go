@@ -1,7 +1,7 @@
 package services
 
 import (
-	"dns-api-go/internal/common"
+	"dns-api-go/internal/bluecat"
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
 	"dns-api-go/internal/types"
@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"net/url"
+	"strings"
 )
 
 type IpAddressEntityService interface {
@@ -31,37 +32,34 @@ func NewIpAddressService(server interfaces.ServerInterface) *IpAddressService {
 func (ips *IpAddressService) GetIpAddress(address string) (*models.Entity, error) {
 	logger.Info("GetIpAddress started", zap.String("address", address))
 
-	// Get the container ID
-	containerId, err := GetConfigID(ips.server)
-	if err != nil {
-		return nil, err
-	}
-
-	// Send http request to bluecat
-	route, params := "/getIP4Address", fmt.Sprintf("address=%s&containerId=%d", address, containerId)
+	// V2: GET /api/v2/ipv4Addresses?filter=address:eq('{addr}')
+	route := "/api/v2/ipv4Addresses"
+	params := fmt.Sprintf("filter=%s&limit=1", url.QueryEscape(fmt.Sprintf("address:eq('%s')", address)))
 	resp, err := ips.server.MakeRequest("GET", route, params, nil)
 	if err != nil {
 		return nil, err
 	}
+	if resp == nil {
+		logger.Info("Entity not found", zap.String("ip address", address))
+		return nil, &ErrEntityNotFound{}
+	}
 	logger.Info("Received response for GetIpAddress", zap.ByteString("response", resp))
 
-	// Unmarshal the response
-	var bluecatEntity models.BluecatEntity
-	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
+	// Unmarshal V2 collection response
+	var collection bluecat.V2Collection
+	if err := json.Unmarshal(resp, &collection); err != nil {
 		logger.Error("Error unmarshalling entity response", zap.Error(err))
 		return nil, err
 	}
 
-	// Check if the response represents an empty entity
-	if bluecatEntity.IsEmpty() {
+	if len(collection.Data) == 0 {
 		logger.Info("Entity not found", zap.String("ip address", address))
 		return nil, &ErrEntityNotFound{}
 	}
 
-	// Convert BluecatEntity to Entity
-	entity := bluecatEntity.ToEntity()
+	entity := collection.Data[0].ToEntity()
 
-	logger.Info("GetIpAddress successfull", zap.String("ip address", address))
+	logger.Info("GetIpAddress successful", zap.String("ip address", address))
 	return &entity, nil
 }
 
@@ -90,42 +88,51 @@ func (ips *IpAddressService) DeleteIpAddress(address string) error {
 func (ips *IpAddressService) AssignIpAddress(action string, macAddress string, parentId int, hostInfo map[string]string, properties map[string]string) (*models.Entity, error) {
 	logger.Info("AssignIpAddress started", zap.String("action", action), zap.String("mac address", macAddress))
 
-	// Get the configuration ID
-	configId, err := GetConfigID(ips.server)
+	// V2: POST /api/v2/ipv4Addresses with JSON body for next-available assignment
+	route := "/api/v2/ipv4Addresses"
+	v2Body := map[string]interface{}{
+		"action":      action,
+		"parentId":    parentId,
+		"macAddress":  macAddress,
+		"properties":  properties,
+	}
+
+	// Add host info fields
+	if hostname, ok := hostInfo["hostname"]; ok && hostname != "" {
+		v2Body["hostname"] = hostname
+	}
+	if viewId, ok := hostInfo["viewId"]; ok && viewId != "" {
+		v2Body["viewId"] = viewId
+	}
+	if reverseFlag, ok := hostInfo["reverseFlag"]; ok {
+		v2Body["reverseFlag"] = reverseFlag
+	}
+	if sameAsZoneFlag, ok := hostInfo["sameAsZoneFlag"]; ok {
+		v2Body["sameAsZoneFlag"] = sameAsZoneFlag
+	}
+
+	bodyJSON, err := json.Marshal(v2Body)
 	if err != nil {
+		logger.Error("Error marshalling assign IP request", zap.Error(err))
 		return nil, err
 	}
 
-	// Create hostInfo string
-	hostInfoString := fmt.Sprintf("%s,%s,%s,%s",
-		hostInfo["hostname"],
-		hostInfo["viewId"],
-		hostInfo["reverseFlag"],
-		hostInfo["sameAsZoneFlag"])
-
-	// Create properties string
-	propertiesString := common.ConvertToSeparatedString(properties, "|")
-
-	// Send http request to bluecat
-	route := "/assignNextAvailableIP4Address"
-	params := fmt.Sprintf("action=%s&configurationId=%d&hostInfo=%s&macAddress=%s&parentId=%d&properties=%s",
-		action, configId, url.QueryEscape(hostInfoString), url.QueryEscape(macAddress), parentId, url.QueryEscape(propertiesString))
-	resp, err := ips.server.MakeRequest("POST", route, params, nil)
+	body := strings.NewReader(string(bodyJSON))
+	resp, err := ips.server.MakeRequest("POST", route, "", body)
 	if err != nil {
 		return nil, err
 	}
 	logger.Info("Received response for AssignIpAddress", zap.ByteString("response", resp))
 
-	// Unmarshal the response
-	var bluecatEntity models.BluecatEntity
-	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
+	// Unmarshal V2 entity response
+	var v2Entity bluecat.V2Entity
+	if err := json.Unmarshal(resp, &v2Entity); err != nil {
 		logger.Error("Error unmarshalling entity response", zap.Error(err))
 		return nil, err
 	}
 
-	// Convert BluecatEntity to Entity
-	entity := bluecatEntity.ToEntity()
+	entity := v2Entity.ToEntity()
 
-	logger.Info("AssignIpAddress successfull", zap.Int("entity id", entity.ID))
+	logger.Info("AssignIpAddress successful", zap.Int("entity id", entity.ID))
 	return &entity, nil
 }

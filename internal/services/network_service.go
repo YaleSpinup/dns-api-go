@@ -30,8 +30,7 @@ func (ns *NetworkService) GetEntitiesByHint(start int, count int, options map[st
         zap.Int("count", count),
         zap.Any("options", options))
 
-    route := "/getIP4NetworksByHint"
-    networks, err := GetEntitiesByHintHelper(ns.server, route, start, count, options)
+    networks, err := GetEntitiesByHintHelper(ns.server, "ipv4Networks", start, count, options)
     if err != nil {
         return nil, err
     }

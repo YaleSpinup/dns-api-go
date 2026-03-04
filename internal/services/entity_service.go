@@ -1,6 +1,7 @@
 package services
 
 import (
+	"dns-api-go/internal/bluecat"
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
 	"dns-api-go/logger"
@@ -60,18 +61,20 @@ func (es *BaseService) CustomSearch(start int, count int, filters map[string]str
 		zap.Any("options", options),
 		zap.String("objectType", objectType))
 
-	// Construct route and query parameters
-	route := "/customSearch"
+	// V2: GET /api/v2/{resourceType}?limit=N&offset=N&filter=...
+	resource := entityTypeToV2Resource(objectType)
+	route := fmt.Sprintf("/api/v2/%s", resource)
 	queryParams := url.Values{}
-	queryParams.Set("start", fmt.Sprintf("%d", start))
-	queryParams.Set("count", fmt.Sprintf("%d", count))
-	queryParams.Set("type", objectType)
-	queryParams.Set("includeHA", "false")
+	queryParams.Set("limit", fmt.Sprintf("%d", count))
+	queryParams.Set("offset", fmt.Sprintf("%d", start))
+
+	// Build V2 filter from the filters map
+	var filterParts []string
 	for key, value := range filters {
-		queryParams.Add("filters", fmt.Sprintf("%s=%s", key, value))
+		filterParts = append(filterParts, fmt.Sprintf("%s:eq('%s')", key, value))
 	}
-	for _, option := range options {
-		queryParams.Add("options", option)
+	if len(filterParts) > 0 {
+		queryParams.Set("filter", fmt.Sprintf("%s", joinFilters(filterParts)))
 	}
 
 	// Send http request to bluecat
@@ -79,17 +82,32 @@ func (es *BaseService) CustomSearch(start int, count int, filters map[string]str
 	if err != nil {
 		return nil, err
 	}
+	if resp == nil {
+		entities := make([]models.Entity, 0)
+		return &entities, nil
+	}
 
-	// Unmarshal the response
-	var entitiesResp []models.BluecatEntity
-	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
+	// Unmarshal V2 collection response
+	var collection bluecat.V2Collection
+	if err := json.Unmarshal(resp, &collection); err != nil {
 		logger.Error("Error unmarshalling entities response", zap.Error(err))
 		return nil, err
 	}
 
-	// For each entity response, convert it to an entity
-	entities := models.ConvertToEntities(entitiesResp)
+	entities := bluecat.ConvertV2ToEntities(collection.Data)
 
 	logger.Info("CustomSearch successful", zap.Int("count", len(entities)))
 	return &entities, nil
+}
+
+// joinFilters joins filter expressions with " and " for V2 API.
+func joinFilters(parts []string) string {
+	result := ""
+	for i, p := range parts {
+		if i > 0 {
+			result += " and "
+		}
+		result += p
+	}
+	return result
 }

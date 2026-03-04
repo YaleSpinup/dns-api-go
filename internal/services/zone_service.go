@@ -30,8 +30,7 @@ func (zs *ZoneService) GetEntitiesByHint(start int, count int, options map[strin
 		zap.Int("count", count),
 		zap.Any("options", options))
 
-	route := "/getZonesByHint"
-	zones, err := GetEntitiesByHintHelper(zs.server, route, start, count, options)
+	zones, err := GetEntitiesByHintHelper(zs.server, "zones", start, count, options)
 	if err != nil {
 		return nil, err
 	}

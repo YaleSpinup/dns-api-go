@@ -1,7 +1,7 @@
 package services
 
 import (
-	"dns-api-go/internal/common"
+	"dns-api-go/internal/bluecat"
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
 	"dns-api-go/internal/types"
@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
+	"net/url"
 	"strings"
 )
 
@@ -104,39 +105,39 @@ func (rs *RecordService) GetRecordsByType(recordType string, parameters map[stri
 }
 
 func (rs *RecordService) getHostOrAliasRecordsByHint(recordType string, start int, count int, options map[string]string) (*[]models.Entity, error) {
-	// Define route and parameter map
-	var route string
-	switch recordType {
-	case types.HOSTRECORD:
-		route = "/getHostRecordsByHint"
-	case types.CNAMERECORD:
-		route = "/getAliasesByHint"
-	default:
+	// V2: GET /api/v2/resourceRecords?filter=type:eq('{type}') and name:contains('{hint}')
+	if recordType != types.HOSTRECORD && recordType != types.CNAMERECORD {
 		return nil, fmt.Errorf("invalid record type")
 	}
-	paramsMap := map[string]string{
-		"count":   fmt.Sprintf("%d", count),
-		"start":   fmt.Sprintf("%d", start),
-		"options": common.ConvertToSeparatedString(options, "&"),
-	}
 
-	// Send request to bluecat
-	params := common.ConvertToSeparatedString(paramsMap, "&")
+	route := "/api/v2/resourceRecords"
+	params := fmt.Sprintf("limit=%d&offset=%d", count, start)
+
+	// Build filter with record type and hint
+	var filterParts []string
+	filterParts = append(filterParts, fmt.Sprintf("type:eq('%s')", recordType))
+	if hint, ok := options["hint"]; ok && hint != "" {
+		filterParts = append(filterParts, fmt.Sprintf("name:contains('%s')", hint))
+	}
+	params += "&filter=" + url.QueryEscape(strings.Join(filterParts, " and "))
+
 	resp, err := rs.server.MakeRequest("GET", route, params, nil)
 	if err != nil {
 		return nil, err
 	}
+	if resp == nil {
+		entities := make([]models.Entity, 0)
+		return &entities, nil
+	}
 
-	// Unmarshal the response
-	var entitiesResp []models.BluecatEntity
-	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
+	// Unmarshal V2 collection response
+	var collection bluecat.V2Collection
+	if err := json.Unmarshal(resp, &collection); err != nil {
 		logger.Error("Error unmarshalling entities response", zap.Error(err))
 		return nil, err
 	}
 
-	// For each entity response, convert it to an entity
-	entities := models.ConvertToEntities(entitiesResp)
-
+	entities := bluecat.ConvertV2ToEntities(collection.Data)
 	return &entities, nil
 }
 
@@ -200,23 +201,21 @@ func (rs *RecordService) CreateRecord(recordType string, parameters map[string]i
 		}
 	}
 
-	var route string
-	var paramsMap map[string]string
-
-	// Set the route and properties map according to the record type
+	// Build V2 JSON body based on record type
+	var v2Body map[string]interface{}
 	switch recordType {
 	case types.HOSTRECORD:
-		route, paramsMap, err = prepCreateHostParams(parameters, viewId)
+		v2Body, err = prepCreateHostBody(parameters, viewId)
 		if err != nil {
 			return nil, err
 		}
 	case types.CNAMERECORD:
-		route, paramsMap, err = prepCreateCNAMEParams(parameters, viewId)
+		v2Body, err = prepCreateCNAMEBody(parameters, viewId)
 		if err != nil {
 			return nil, err
 		}
 	case types.EXTERNALHOST:
-		route, paramsMap, err = prepCreateExternalParams(parameters, viewId)
+		v2Body, err = prepCreateExternalBody(parameters, viewId)
 		if err != nil {
 			return nil, err
 		}
@@ -224,23 +223,30 @@ func (rs *RecordService) CreateRecord(recordType string, parameters map[string]i
 		return nil, fmt.Errorf("invalid record type")
 	}
 
-	// Send request to bluecat
-	params := common.ConvertToSeparatedString(paramsMap, "&")
-	resp, err := rs.server.MakeRequest("POST", route, params, nil)
+	// V2: POST /api/v2/resourceRecords with JSON body
+	route := "/api/v2/resourceRecords"
+	bodyJSON, err := json.Marshal(v2Body)
+	if err != nil {
+		logger.Error("Error marshalling record request", zap.Error(err))
+		return nil, err
+	}
+
+	body := strings.NewReader(string(bodyJSON))
+	resp, err := rs.server.MakeRequest("POST", route, "", body)
 	if err != nil {
 		logger.Info("Error code", zap.Error(err))
 		return nil, err
 	}
 
-	// Unmarshal the response to get the object iD
-	var recordId int
-	if err := json.Unmarshal(resp, &recordId); err != nil {
-		logger.Error("Error unmarshalling recordId", zap.Error(err))
+	// Unmarshal V2 entity response
+	var v2Entity bluecat.V2Entity
+	if err := json.Unmarshal(resp, &v2Entity); err != nil {
+		logger.Error("Error unmarshalling record response", zap.Error(err))
 		return nil, err
 	}
 
 	// Get the new entity details
-	entity, err := rs.GetEntity(recordId, true)
+	entity, err := rs.GetEntity(v2Entity.ID, true)
 	if err != nil {
 		return nil, err
 	}
@@ -248,85 +254,76 @@ func (rs *RecordService) CreateRecord(recordType string, parameters map[string]i
 	return entity, nil
 }
 
-func prepCreateHostParams(parameters map[string]interface{}, viewId int) (string, map[string]string, error) {
-	// Validate parameters
+func prepCreateHostBody(parameters map[string]interface{}, viewId int) (map[string]interface{}, error) {
 	absoluteName, ok := parameters["absoluteName"].(string)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for absoluteName")
+		return nil, fmt.Errorf("invalid type for absoluteName")
 	}
 	addresses, ok := parameters["addresses"].([]string)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for addresses")
+		return nil, fmt.Errorf("invalid type for addresses")
 	}
 	properties, ok := parameters["properties"].(map[string]string)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for properties")
+		return nil, fmt.Errorf("invalid type for properties")
 	}
 	ttl, ok := parameters["ttl"].(int)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for ttl")
+		return nil, fmt.Errorf("invalid type for ttl")
 	}
 
-	// Define route and parameter map
-	route := "/addHostRecord"
-	paramsMap := map[string]string{
+	return map[string]interface{}{
+		"type":         types.HOSTRECORD,
 		"absoluteName": absoluteName,
-		"addresses":    strings.Join(addresses, ","),
-		"properties":   common.ConvertToSeparatedString(properties, "|"),
-		"ttl":          fmt.Sprintf("%d", ttl),
-		"viewId":       fmt.Sprintf("%d", viewId),
-	}
-	return route, paramsMap, nil
+		"addresses":    addresses,
+		"properties":   properties,
+		"ttl":          ttl,
+		"viewId":       viewId,
+	}, nil
 }
 
-func prepCreateCNAMEParams(parameters map[string]interface{}, viewId int) (string, map[string]string, error) {
-	// Validate parameters
+func prepCreateCNAMEBody(parameters map[string]interface{}, viewId int) (map[string]interface{}, error) {
 	absoluteName, ok := parameters["absoluteName"].(string)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for absoluteName")
+		return nil, fmt.Errorf("invalid type for absoluteName")
 	}
 	linkedRecordName, ok := parameters["linkedRecordName"].(string)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for linkedRecordName")
+		return nil, fmt.Errorf("invalid type for linkedRecordName")
 	}
 	properties, ok := parameters["properties"].(map[string]string)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for properties")
+		return nil, fmt.Errorf("invalid type for properties")
 	}
 	ttl, ok := parameters["ttl"].(int)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for ttl")
+		return nil, fmt.Errorf("invalid type for ttl")
 	}
 
-	// Define route and parameter map
-	route := "/addAliasRecord"
-	paramsMap := map[string]string{
+	return map[string]interface{}{
+		"type":             types.CNAMERECORD,
 		"absoluteName":     absoluteName,
 		"linkedRecordName": linkedRecordName,
-		"properties":       common.ConvertToSeparatedString(properties, "|"),
-		"ttl":              fmt.Sprintf("%d", ttl),
-		"viewId":           fmt.Sprintf("%d", viewId),
-	}
-	return route, paramsMap, nil
+		"properties":       properties,
+		"ttl":              ttl,
+		"viewId":           viewId,
+	}, nil
 }
 
-func prepCreateExternalParams(parameters map[string]interface{}, viewId int) (string, map[string]string, error) {
-	// Validate parameters
+func prepCreateExternalBody(parameters map[string]interface{}, viewId int) (map[string]interface{}, error) {
 	name, ok := parameters["name"].(string)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for name")
+		return nil, fmt.Errorf("invalid type for name")
 	}
 	properties, ok := parameters["properties"].(map[string]string)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for properties")
+		return nil, fmt.Errorf("invalid type for properties")
 	}
 
-	// Define route and parameter map
-	route := "/addExternalHostRecord"
-	paramsMap := map[string]string{
+	return map[string]interface{}{
+		"type":       types.EXTERNALHOST,
 		"name":       name,
-		"properties": common.ConvertToSeparatedString(properties, "|"),
-		"viewId":     fmt.Sprintf("%d", viewId),
-	}
-	return route, paramsMap, nil
+		"properties": properties,
+		"viewId":     viewId,
+	}, nil
 }
