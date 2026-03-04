@@ -136,3 +136,4 @@ func vers() {
 	fmt.Printf("dns-api-go Version: %s\n", Version)
 	os.Exit(0)
 }
+

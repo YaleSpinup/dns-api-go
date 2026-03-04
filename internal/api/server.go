@@ -79,14 +79,33 @@ type server struct {
 	cidrFile string
 }
 
-// NewServer creates a new server and starts it
-func NewServer(config common.Config) error {
+// App holds the configured application with its router and handler chain.
+// Use NewApp to create an App, then either start it as an HTTP server or
+// wrap its Router with a Lambda adapter.
+type App struct {
+	s       *server
+	handler http.Handler
+}
+
+// Router returns the underlying mux.Router for use with Lambda adapters.
+func (a *App) Router() *mux.Router {
+	return a.s.router
+}
+
+// Handler returns the full middleware-wrapped handler chain.
+func (a *App) Handler() http.Handler {
+	return a.handler
+}
+
+// NewApp creates a fully configured application without starting an HTTP server.
+// This is used by both the ECS server entry point and the Lambda entry point.
+func NewApp(config common.Config) (*App, error) {
 	// setup server context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	if config.Org == "" {
-		return errors.New("'org' cannot be empty in the configuration")
+		return nil, errors.New("'org' cannot be empty in the configuration")
 	}
 
 	s := server{
@@ -121,12 +140,12 @@ func NewServer(config common.Config) error {
 	ipAddressService := services.NewIpAddressService(&s)
 	recordService := services.NewRecordService(&s)
 	s.services = Services{
-		BaseService: baseService,
-		ZoneService: zoneService,
-		NetworkService: networkService,
+		BaseService:       baseService,
+		ZoneService:       zoneService,
+		NetworkService:    networkService,
 		MacAddressService: macAddressService,
-		IpAddressService: ipAddressService,
-		RecordService: recordService,
+		IpAddressService:  ipAddressService,
+		RecordService:     recordService,
 	}
 
 	if b := config.ProxyBackend; b != nil {
@@ -147,12 +166,24 @@ func NewServer(config common.Config) error {
 	// load routes
 	s.routes()
 
+	handler := handlers.RecoveryHandler()(handlers.LoggingHandler(os.Stdout, TokenMiddleware([]byte(config.Token), publicURLs, s.router)))
+
+	return &App{s: &s, handler: handler}, nil
+}
+
+// NewServer creates a new server and starts it (used by the ECS entry point).
+func NewServer(config common.Config) error {
+	app, err := NewApp(config)
+	if err != nil {
+		return err
+	}
+
 	if config.ListenAddress == "" {
 		config.ListenAddress = ":8080"
 	}
-	handler := handlers.RecoveryHandler()(handlers.LoggingHandler(os.Stdout, TokenMiddleware([]byte(config.Token), publicURLs, s.router)))
+
 	srv := &http.Server{
-		Handler:      handler,
+		Handler:      app.Handler(),
 		Addr:         config.ListenAddress,
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
