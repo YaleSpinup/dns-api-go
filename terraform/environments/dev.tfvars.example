@@ -1,0 +1,27 @@
+# Development Environment Variables
+# Copy to dev.tfvars and fill in actual values
+
+environment  = "dev"
+project_name = "shared-lambda-api"
+aws_region   = "us-east-1"
+
+# VPC Configuration (required — use existing VPC)
+vpc_id             = "vpc-xxxxxxxxxxxxxxxxx"
+private_subnet_ids = ["subnet-xxxxxxxxxxxxxxxxx", "subnet-yyyyyyyyyyyyyyyyy"]
+public_subnet_ids  = ["subnet-xxxxxxxxxxxxxxxxx", "subnet-yyyyyyyyyyyyyyyyy"]
+
+# NAT Gateway — set true if no NAT Gateway exists in the VPC
+create_nat_gateway = false
+
+# Custom Domain (optional — leave empty to skip)
+custom_domain_name = ""
+certificate_arn    = ""
+
+# Lambda Security Group — CIDRs for outbound access (e.g., Bluecat network)
+lambda_security_group_egress_cidrs = ["0.0.0.0/0"]
+
+# Additional tags
+tags = {
+  Team = "platform"
+}
+
