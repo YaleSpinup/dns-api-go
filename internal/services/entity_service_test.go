@@ -40,7 +40,7 @@ func TestGetEntity(t *testing.T) {
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
-				"properties": "key1=value1|key2=value2"
+				"properties": {"key1": "value1", "key2": "value2"}
 			}`),
 			mockMakeRequestError: nil,
 			expectedResponse: &models.Entity{
@@ -58,15 +58,10 @@ func TestGetEntity(t *testing.T) {
 			name:      "Entity not found",
 			entityId:  999,
 			includeHA: true,
-			mockMakeRequestResponse: []byte(`{
-				"id": 0,
-				"name": null,
-				"type": null,
-				"properties": null
-			}`),
-			mockMakeRequestError: nil,
-			expectedResponse:     nil,
-			expectedError:        &ErrEntityNotFound{},
+			mockMakeRequestResponse: nil,
+			mockMakeRequestError:    nil,
+			expectedResponse:        nil,
+			expectedError:           &ErrEntityNotFound{},
 		},
 		{
 			name:                    "JSON unmarshal error",
@@ -121,7 +116,7 @@ func TestDeleteEntity(t *testing.T) {
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
-				"properties": "key1=value1|key2=value2"
+				"properties": {"key1": "value1", "key2": "value2"}
 			}`),
 			mockMakeReqGetEntError: nil,
 			mockMakeReqDelEntError: nil,
@@ -134,7 +129,7 @@ func TestDeleteEntity(t *testing.T) {
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
-				"properties": "key1=value1|key2=value2"
+				"properties": {"key1": "value1", "key2": "value2"}
 			}`),
 			mockMakeReqGetEntError: nil,
 			mockMakeReqDelEntError: nil,
@@ -155,7 +150,7 @@ func TestDeleteEntity(t *testing.T) {
 				"id": 1,
 				"name": "Test Entity",
 				"type": "INVALIDTYPE",
-				"properties": "key1=value1|key2=value2"
+				"properties": {"key1": "value1", "key2": "value2"}
 			}`),
 			mockMakeReqGetEntError: nil,
 			mockMakeReqDelEntError: nil,
@@ -168,7 +163,7 @@ func TestDeleteEntity(t *testing.T) {
 				"id": 1,
 				"name": "Test Entity",
 				"type": "HostRecord",
-				"properties": "key1=value1|key2=value2"
+				"properties": {"key1": "value1", "key2": "value2"}
 			}`),
 			mockMakeReqGetEntError: nil,
 			mockMakeReqDelEntError: errors.New("Simulating MakeRequest error"),
@@ -180,12 +175,12 @@ func TestDeleteEntity(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mockServer := &mocks.MockServer{
 				MakeRequestFunc: func(method, route, queryParam string, body io.Reader) ([]byte, error) {
-					if strings.Contains(route, "getEntityById") {
+					if strings.Contains(route, "/api/v2/entities/") {
 						return tc.mockMakeReqGetEntResp, tc.mockMakeReqGetEntError
-					} else if strings.Contains(route, "delete") {
+					} else if strings.Contains(route, "/api/v2/resourceRecords/") {
 						return nil, tc.mockMakeReqDelEntError
 					} else {
-						return nil, errors.New("unexpected route")
+						return nil, errors.New("unexpected route: " + route)
 					}
 				},
 			}

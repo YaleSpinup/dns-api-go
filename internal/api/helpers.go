@@ -1,7 +1,6 @@
 package api
 
 import (
-	"crypto/tls"
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
@@ -11,127 +10,12 @@ import (
 	"io"
 	"net/http"
 	"regexp"
-	"strings"
-	"time"
 )
 
-func (s *server) generateAuthToken(username, password string) (string, error) {
-	// Construct the login URL
-	loginURL := fmt.Sprintf("%s/login?username=%s&password=%s", s.bluecat.baseUrl, username, password)
-	logger.Debug("Login URL", zap.String("URL", loginURL))
-
-	client := &http.Client{
-		Timeout: 120 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-	}
-
-	// Send the login request using the custom http.Client
-	resp, err := client.Get(loginURL)
-	if err != nil {
-		logger.Error("Error sending login request", zap.Error(err))
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Error("Error reading login response body", zap.Error(err))
-		return "", err
-	}
-
-	// Check the response status code
-	if resp.StatusCode != http.StatusOK {
-		logger.Error("Login failed with status code",
-			zap.Int("StatusCode", resp.StatusCode),
-			zap.String("Body", string(body)))
-		return "", fmt.Errorf("login failed: %s", string(body))
-	}
-
-	// Extract the token from the response body
-	token := strings.TrimPrefix(string(body), "\"Session Token-> ")
-	token = strings.TrimSuffix(token, " <- for User : "+username+"\"")
-	logger.Debug("Generated authentication token", zap.String("Token", token))
-
-	return token, nil
-}
-
-func (s *server) getToken() (string, error) {
-	s.bluecat.tokenLock.Lock()
-	defer s.bluecat.tokenLock.Unlock()
-
-	if s.bluecat.token == "" {
-		token, err := s.generateAuthToken(s.bluecat.user, s.bluecat.password)
-		if err != nil {
-			return "", err
-		}
-		s.bluecat.token = token
-	}
-
-	return s.bluecat.token, nil
-}
-
+// MakeRequest delegates to the Bluecat V2 client.
+// This implements ServerInterface so services can call it unchanged.
 func (s *server) MakeRequest(method, route, queryParam string, body io.Reader) ([]byte, error) {
-	// Construct the API URL
-	apiURL := s.bluecat.baseUrl + route
-	if queryParam != "" {
-		apiURL += "?" + queryParam
-	}
-	token, err := s.getToken()
-	logger.Debug("API URL", zap.String("URL", apiURL))
-
-	// Create a new HTTP request
-	req, err := http.NewRequest(strings.ToUpper(method), apiURL, body)
-	if err != nil {
-		return nil, fmt.Errorf("error creating HTTP request: %v", err)
-	}
-
-	req.Header.Set("Authorization", token)
-	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
-
-	// Send the HTTP request
-	client := &http.Client{
-		Timeout: 120 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error sending HTTP request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Read the response body
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %v", err)
-	}
-
-	// Check the response status code
-	if resp.StatusCode == http.StatusUnauthorized {
-		logger.Warn("Unauthorized: Token expired or invalid. Generating a new token.",
-			zap.String("route", route),
-			zap.String("queryParam", queryParam))
-
-		// Clear the current token
-		s.bluecat.tokenLock.Lock()
-		s.bluecat.token = ""
-		s.bluecat.tokenLock.Unlock()
-
-		return s.MakeRequest(method, route, queryParam, body)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		logger.Error("Unexpected status code received from API",
-			zap.Int("StatusCode", resp.StatusCode),
-			zap.String("Body", string(respBody)))
-		return nil, fmt.Errorf("unexpected status code: %d, Body: %s", resp.StatusCode, string(respBody))
-	}
-
-	return respBody, nil
+	return s.bluecat.client.MakeRequest(method, route, queryParam, body)
 }
 
 // respond writes the response to the client

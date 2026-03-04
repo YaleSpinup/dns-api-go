@@ -1,6 +1,7 @@
 package services
 
 import (
+	"dns-api-go/internal/bluecat"
 	"dns-api-go/internal/common"
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
@@ -9,85 +10,141 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
+	"net/url"
 	"strings"
 )
 
-// GetConfigID retrieves the configuration ID from Bluecat.
+// entityTypeToV2Resource maps Bluecat entity type names to V2 API resource paths.
+func entityTypeToV2Resource(entityType string) string {
+	switch entityType {
+	case types.CONFIGURATION:
+		return "configurations"
+	case types.ZONE:
+		return "zones"
+	case types.HOSTRECORD:
+		return "resourceRecords" // host records are under resourceRecords in V2
+	case types.CNAMERECORD:
+		return "resourceRecords"
+	case types.EXTERNALHOST:
+		return "resourceRecords"
+	case types.GENERICRECORD:
+		return "resourceRecords"
+	case types.MXRECORD:
+		return "resourceRecords"
+	case types.TXTRECORD:
+		return "resourceRecords"
+	case types.SRVRECORD:
+		return "resourceRecords"
+	case types.HINFORECORD:
+		return "resourceRecords"
+	case types.IP4ADDRESS:
+		return "ipv4Addresses"
+	case types.IP4BLOCK:
+		return "ipv4Blocks"
+	case types.IP4NETWORK:
+		return "ipv4Networks"
+	case types.MACADDRESS:
+		return "macAddresses"
+	case types.MACPOOL:
+		return "macPools"
+	case types.VIEW:
+		return "views"
+	case types.DHCP4RANGE:
+		return "dhcpRanges"
+	default:
+		return "entities"
+	}
+}
+
+// GetConfigID retrieves the configuration ID from Bluecat via V2 API.
 func GetConfigID(server interfaces.ServerInterface) (int, error) {
 	logger.Info("GetConfigID started")
 
-	containers, err := GetEntities(server, 0, 1, 0, types.CONFIGURATION, false)
+	route := "/api/v2/configurations"
+	params := "limit=1&offset=0"
+	resp, err := server.MakeRequest("GET", route, params, nil)
 	if err != nil {
 		return 0, err
 	}
-	if len(*containers) == 0 {
+	if resp == nil {
+		return 0, fmt.Errorf("failed to retrieve configuration: not found")
+	}
+
+	var collection bluecat.V2Collection
+	if err := json.Unmarshal(resp, &collection); err != nil {
+		logger.Error("Error unmarshalling configurations response", zap.Error(err))
+		return 0, err
+	}
+	if len(collection.Data) == 0 {
 		return 0, fmt.Errorf("failed to retrieve containerId")
 	}
-	configId := (*containers)[0].ID
 
+	configId := collection.Data[0].ID
 	logger.Info("GetConfigID successful", zap.Int("configId", configId))
 	return configId, nil
 }
 
-// GetParentID retrieves the parent ID of an entity from Bluecat.
+// GetParentID retrieves the parent ID of an entity from Bluecat via V2 API.
 func GetParentID(server interfaces.ServerInterface, entityId int) (int, error) {
 	logger.Info("GetParentID started", zap.Int("entityId", entityId))
 
-	// Send http request to bluecat
-	route, params := "/getParent", fmt.Sprintf("entityId=%d", entityId)
-	resp, err := server.MakeRequest("GET", route, params, nil)
+	// In V2, get the entity and extract parent link
+	route := fmt.Sprintf("/api/v2/entities/%d", entityId)
+	resp, err := server.MakeRequest("GET", route, "", nil)
 	if err != nil {
 		logger.Error("Error getting parent ID", zap.Error(err), zap.Int("entityId", entityId))
 		return -1, err
 	}
-
-	// Unmarshal the response
-	var bluecatEntity models.BluecatEntity
-	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
-		logger.Error("Error unmarshalling entity response", zap.Error(err))
-		return -1, err
-	}
-
-	// Check if the response represents an empty entity
-	if bluecatEntity.IsEmpty() {
+	if resp == nil {
 		logger.Info("Entity not found", zap.Int("entity id", entityId))
 		return -1, &ErrEntityNotFound{}
 	}
 
-	// Convert BluecatEntity to Entity
-	parentEntity := bluecatEntity.ToEntity()
+	var v2Entity bluecat.V2Entity
+	if err := json.Unmarshal(resp, &v2Entity); err != nil {
+		logger.Error("Error unmarshalling entity response", zap.Error(err))
+		return -1, err
+	}
 
-	logger.Info("GetParentID successful", zap.Int("parentId", parentEntity.ID))
-	return parentEntity.ID, nil
+	if v2Entity.IsEmpty() {
+		return -1, &ErrEntityNotFound{}
+	}
+
+	// Extract parent from the V2 response
+	if v2Entity.Parent != nil {
+		logger.Info("GetParentID successful", zap.Int("parentId", v2Entity.Parent.ID))
+		return v2Entity.Parent.ID, nil
+	}
+
+	// If no parent link, try the _links or fall back
+	return -1, &ErrEntityNotFound{}
 }
 
-// GetEntityByID Retrieves an entity by ID from bluecat
+// GetEntityByID retrieves an entity by ID from Bluecat via V2 API.
 func GetEntityByID(server interfaces.ServerInterface, id int, includeHA bool, expectedTypes []string) (*models.Entity, error) {
-	// Send http request to bluecat
-	route, params := "/getEntityById", fmt.Sprintf("id=%d&includeHA=%t", id, includeHA)
-	resp, err := server.MakeRequest("GET", route, params, nil)
-
-	// Check for errors when sending request
+	route := fmt.Sprintf("/api/v2/entities/%d", id)
+	resp, err := server.MakeRequest("GET", route, "", nil)
 	if err != nil {
 		logger.Error("Error getting entity by ID", zap.Error(err), zap.Int("id", id))
 		return nil, err
 	}
+	if resp == nil {
+		logger.Info("Entity not found", zap.Int("id", id))
+		return nil, &ErrEntityNotFound{}
+	}
 	logger.Info("Received response for GetEntityByID", zap.ByteString("response", resp))
 
-	// Unmarshal the response
-	var bluecatEntity models.BluecatEntity
-	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
+	var v2Entity bluecat.V2Entity
+	if err := json.Unmarshal(resp, &v2Entity); err != nil {
 		logger.Error("Error unmarshalling entity response", zap.Error(err))
 		return nil, err
 	}
-	// Check if the response represents an empty entity
-	if bluecatEntity.IsEmpty() {
+	if v2Entity.IsEmpty() {
 		logger.Info("Entity not found", zap.Int("id", id))
 		return nil, &ErrEntityNotFound{}
 	}
 
-	// Convert BluecatEntity to Entity
-	entity := bluecatEntity.ToEntity()
+	entity := v2Entity.ToEntity()
 
 	// Check if the entity type is one of the expected types
 	if len(expectedTypes) > 0 && !common.Contains(expectedTypes, entity.Type) {
@@ -112,7 +169,7 @@ var ALLOWDELETE = []string{
 	types.MACPOOL,
 }
 
-// DeleteEntityByID Deletes an entity by ID from bluecat
+// DeleteEntityByID deletes an entity by ID from Bluecat via V2 API.
 func DeleteEntityByID(server interfaces.ServerInterface, id int, expectedTypes []string) error {
 	logger.Info("DeleteEntityByID started", zap.Int("id", id))
 
@@ -136,11 +193,10 @@ func DeleteEntityByID(server interfaces.ServerInterface, id int, expectedTypes [
 		return &ErrDeleteNotAllowed{Type: entity.Type}
 	}
 
-	// Send http request to bluecat
-	route, params := "/delete", fmt.Sprintf("objectId=%d", id)
-	_, err = server.MakeRequest("DELETE", route, params, nil)
-
-	// Check for errors while sending request
+	// V2: DELETE /api/v2/{resourceType}/{id}
+	resource := entityTypeToV2Resource(entity.Type)
+	route := fmt.Sprintf("/api/v2/%s/%d", resource, id)
+	_, err = server.MakeRequest("DELETE", route, "", nil)
 	if err != nil {
 		logger.Error("Error deleting entity", zap.Error(err), zap.Int("id", id))
 		return err
@@ -150,23 +206,28 @@ func DeleteEntityByID(server interfaces.ServerInterface, id int, expectedTypes [
 	return nil
 }
 
-// UpdateEntity Updates an entity in Bluecat
+// UpdateEntity updates an entity in Bluecat via V2 API.
 func UpdateEntity(server interfaces.ServerInterface, entity *models.Entity) error {
 	logger.Info("UpdateEntity started", zap.Int("entityID", entity.ID))
 
-	bluecatEntityJSON, err := entity.ToBluecatJSON()
+	// Build V2 JSON body
+	v2Body := map[string]interface{}{
+		"id":         entity.ID,
+		"name":       entity.Name,
+		"type":       entity.Type,
+		"properties": entity.Properties,
+	}
+	bodyJSON, err := json.Marshal(v2Body)
 	if err != nil {
-		logger.Error("Error marshalling entity to JSON for Bluecat", zap.Error(err))
+		logger.Error("Error marshalling entity to JSON", zap.Error(err))
+		return err
 	}
 
-	// Create an io.Reader from the JSON string
-	body := strings.NewReader(string(bluecatEntityJSON))
-
-	// Send http request to bluecat
-	route := "/update"
+	// V2: PUT /api/v2/{resourceType}/{id}
+	resource := entityTypeToV2Resource(entity.Type)
+	route := fmt.Sprintf("/api/v2/%s/%d", resource, entity.ID)
+	body := strings.NewReader(string(bodyJSON))
 	_, err = server.MakeRequest("PUT", route, "", body)
-
-	// Check for errors when sending request
 	if err != nil {
 		logger.Error("Error updating entity", zap.Error(err), zap.Int("entityID", entity.ID))
 		return err
@@ -176,46 +237,54 @@ func UpdateEntity(server interfaces.ServerInterface, entity *models.Entity) erro
 	return nil
 }
 
-// GetEntitiesByHintHelper retrieves entities by hint, given a specific route.
-// Many of the entity retrieval functions in across the different services use this helper function because they share the same logic
+// GetEntitiesByHintHelper retrieves entities by hint using V2 search.
 func GetEntitiesByHintHelper(server interfaces.ServerInterface, route string, start int, count int, options map[string]string) (*[]models.Entity, error) {
 	logger.Info("GetEntitiesByHint started",
 		zap.Int("start", start),
 		zap.Int("count", count),
 		zap.Any("options", options))
 
-	// Use Configuration ID as the container ID
-	containerId, err := GetConfigID(server)
+	// Determine the V2 resource type from the V1 route
+	var v2Route string
+	switch route {
+	case "/getZonesByHint":
+		v2Route = "/api/v2/zones"
+	case "/getIP4NetworksByHint":
+		v2Route = "/api/v2/ipv4Networks"
+	default:
+		v2Route = "/api/v2/entities"
+	}
+
+	// Build V2 query parameters
+	params := fmt.Sprintf("limit=%d&offset=%d", count, start)
+
+	// Extract hint from options and use as filter
+	if hint, ok := options["hint"]; ok && hint != "" {
+		params += "&filter=" + url.QueryEscape(fmt.Sprintf("name:contains('%s')", hint))
+	}
+
+	resp, err := server.MakeRequest("GET", v2Route, params, nil)
 	if err != nil {
 		return nil, err
 	}
-
-	// Construct the request parameters
-	params := fmt.Sprintf("containerId=%d&start=%d&count=%d", containerId, start, count)
-	params += "&options=" + common.ConvertToSeparatedString(options, "|")
-
-	// Use the configuration ID to call the Bluecat API to get entities
-	resp, err := server.MakeRequest("GET", route, params, nil)
-	if err != nil {
-		return nil, err
+	if resp == nil {
+		entities := make([]models.Entity, 0)
+		return &entities, nil
 	}
 
-	// Unmarshal the response
-	var entitiesResp []models.BluecatEntity
-	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
+	var collection bluecat.V2Collection
+	if err := json.Unmarshal(resp, &collection); err != nil {
 		logger.Error("Error unmarshalling entities response", zap.Error(err))
 		return nil, err
 	}
 
-	// For each entity response, convert it to an entity
-	entities := models.ConvertToEntities(entitiesResp)
-
+	entities := bluecat.ConvertV2ToEntities(collection.Data)
 	logger.Info("GetEntitiesByHint successful", zap.Int("count", len(entities)))
 	return &entities, nil
 }
 
-// GetEntities retrieves a list of entities from Bluecat based on the provided parameters.
-// Note: The maximum value for count is 10.
+
+// GetEntities retrieves a list of entities from Bluecat via V2 API.
 func GetEntities(server interfaces.ServerInterface, start int, count int, parentId int, entityType string, includeHA bool) (*[]models.Entity, error) {
 	logger.Info("GetEntities started",
 		zap.Int("start", start),
@@ -224,94 +293,103 @@ func GetEntities(server interfaces.ServerInterface, start int, count int, parent
 		zap.String("entityType", entityType),
 		zap.Bool("includeHA", includeHA))
 
-	// Send http request to bluecat
-	route := "/getEntities"
-	params := fmt.Sprintf("start=%d&count=%d&parentId=%d&type=%s&includeHA=%t",
-		start, count, parentId, entityType, includeHA)
-	resp, err := server.MakeRequest("GET", route, params, nil)
+	// V2: GET /api/v2/{resourceType}?limit=N&offset=N&filter=...
+	resource := entityTypeToV2Resource(entityType)
+	route := fmt.Sprintf("/api/v2/%s", resource)
+	params := fmt.Sprintf("limit=%d&offset=%d", count, start)
 
-	// Check for errors when sending request
+	// If parentId is specified, add it as a filter
+	if parentId > 0 {
+		params += fmt.Sprintf("&parentId=%d", parentId)
+	}
+
+	resp, err := server.MakeRequest("GET", route, params, nil)
 	if err != nil {
 		return nil, err
 	}
+	if resp == nil {
+		entities := make([]models.Entity, 0)
+		return &entities, nil
+	}
 
-	// Unmarshal the response
-	var entitiesResp []models.BluecatEntity
-	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
+	var collection bluecat.V2Collection
+	if err := json.Unmarshal(resp, &collection); err != nil {
 		logger.Error("Error unmarshalling entities response", zap.Error(err))
 		return nil, err
 	}
 
-	// For each entity response, convert it to an entity
-	entities := models.ConvertToEntities(entitiesResp)
-
+	entities := bluecat.ConvertV2ToEntities(collection.Data)
 	logger.Info("GetEntities successful", zap.Int("count", len(entities)))
 	return &entities, nil
 }
 
+// GetEntityByName retrieves an entity by name from Bluecat via V2 API.
 func GetEntityByName(server interfaces.ServerInterface, name string, entityType string, parentId int, includeHA bool) (*models.Entity, error) {
 	logger.Info("GetEntityByName started", zap.String("name", name), zap.String("entityType", entityType))
 
-	// Send http request to bluecat
-	route := "/getEntityByName"
-	params := fmt.Sprintf("name=%s&type=%s&includeHA=%t&parentId=%d", name, entityType, includeHA, parentId)
+	// V2: GET /api/v2/{resourceType}?filter=name:eq('{name}')
+	resource := entityTypeToV2Resource(entityType)
+	route := fmt.Sprintf("/api/v2/%s", resource)
+	params := fmt.Sprintf("filter=%s&limit=1", url.QueryEscape(fmt.Sprintf("name:eq('%s')", name)))
+	if parentId > 0 {
+		params += fmt.Sprintf("&parentId=%d", parentId)
+	}
 
 	resp, err := server.MakeRequest("GET", route, params, nil)
 	if err != nil {
 		return nil, err
 	}
-
-	// Unmarshal the response
-	var bluecatEntity models.BluecatEntity
-	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
-		logger.Error("Error unmarshalling entity response", zap.Error(err))
-		return nil, err
-	}
-
-	// Check if the response represents an empty entity
-	if bluecatEntity.IsEmpty() {
+	if resp == nil {
 		logger.Info("Entity not found", zap.String("name", name))
 		return nil, &ErrEntityNotFound{}
 	}
 
-	// Convert BluecatEntity to Entity
-	entity := bluecatEntity.ToEntity()
+	var collection bluecat.V2Collection
+	if err := json.Unmarshal(resp, &collection); err != nil {
+		logger.Error("Error unmarshalling entity response", zap.Error(err))
+		return nil, err
+	}
 
+	if len(collection.Data) == 0 {
+		logger.Info("Entity not found", zap.String("name", name))
+		return nil, &ErrEntityNotFound{}
+	}
+
+	entity := collection.Data[0].ToEntity()
 	logger.Info("GetEntityByName successful", zap.Int("entityID", entity.ID))
 	return &entity, nil
 }
 
-func searchObjectByTypes(server interfaces.ServerInterface, keyword string, start int, count int, includeHA bool, types []string) (*[]models.Entity, error) {
+// searchObjectByTypes searches for entities by keyword and types via V2 API.
+func searchObjectByTypes(server interfaces.ServerInterface, keyword string, start int, count int, includeHA bool, entityTypes []string) (*[]models.Entity, error) {
 	logger.Info("searchObjectByTypes started",
 		zap.String("keyword", keyword),
 		zap.Int("start", start),
 		zap.Int("count", count),
-		zap.Strings("types", types))
+		zap.Strings("types", entityTypes))
 
-	// Convert types array to a comma-separated string
-	typesStr := strings.Join(types, ",")
+	// V2: GET /api/v2/search?keyword=...&types=...&limit=N&offset=N
+	route := "/api/v2/search"
+	typesStr := strings.Join(entityTypes, ",")
+	params := fmt.Sprintf("keyword=%s&types=%s&limit=%d&offset=%d",
+		url.QueryEscape(keyword), url.QueryEscape(typesStr), count, start)
 
-	// Send http request to bluecat
-	route := "/searchObjectByTypes"
-	params := fmt.Sprintf("keyword=%s&start=%d&count=%d&includeHA=%t&types=%s",
-		keyword, start, count, includeHA, typesStr)
 	resp, err := server.MakeRequest("GET", route, params, nil)
-
-	// Check for errors when sending request
 	if err != nil {
 		return nil, err
 	}
+	if resp == nil {
+		entities := make([]models.Entity, 0)
+		return &entities, nil
+	}
 
-	// Unmarshal the response
-	var entitiesResp []models.BluecatEntity
-	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
+	var collection bluecat.V2Collection
+	if err := json.Unmarshal(resp, &collection); err != nil {
 		logger.Error("Error unmarshalling entities response", zap.Error(err))
 		return nil, err
 	}
 
-	// For each entity response, convert it to an entity
-	entities := models.ConvertToEntities(entitiesResp)
-
+	entities := bluecat.ConvertV2ToEntities(collection.Data)
 	logger.Info("searchObjectByTypes successful", zap.Int("count", len(entities)))
 	return &entities, nil
 }

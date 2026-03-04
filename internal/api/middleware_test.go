@@ -112,7 +112,7 @@ func TestTokenMiddleware(t *testing.T) {
 func TestAccountValidationMiddleware(t *testing.T) {
 	// Mock server setup
 	mockServer := server{
-		bluecat: &bluecat{
+		bluecat: &bluecatConfig{
 			account: "validAccount",
 		},
 	}

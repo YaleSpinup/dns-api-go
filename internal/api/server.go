@@ -18,6 +18,7 @@ package api
 
 import (
 	"context"
+	"dns-api-go/internal/bluecat"
 	"dns-api-go/internal/common"
 	"dns-api-go/internal/services"
 	"dns-api-go/logger"
@@ -29,7 +30,6 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -53,14 +53,10 @@ type proxyBackend struct {
 	prefix  string
 }
 
-type bluecat struct {
-	account   string
-	baseUrl   string
-	user      string
-	password  string
-	token     string
-	tokenLock sync.Mutex
-	viewId    string
+type bluecatConfig struct {
+	account string
+	viewId  string
+	client  *bluecat.Client
 }
 
 type Services struct {
@@ -77,7 +73,7 @@ type server struct {
 	version  *apiVersion
 	context  context.Context
 	backend  *proxyBackend
-	bluecat  *bluecat
+	bluecat  *bluecatConfig
 	org      string
 	services Services
 	cidrFile string
@@ -106,13 +102,11 @@ func NewServer(config common.Config) error {
 	}
 
 	if b := config.Bluecat; b != nil {
-		logger.Debug("configuring bluecat", zap.String("baseUrl", b.BaseUrl))
-		s.bluecat = &bluecat{
-			account:  b.Account,
-			baseUrl:  b.BaseUrl,
-			user:     b.Username,
-			password: b.Password,
-			viewId:   b.ViewId,
+		logger.Debug("configuring bluecat V2 client", zap.String("baseUrl", b.BaseUrl))
+		s.bluecat = &bluecatConfig{
+			account: b.Account,
+			viewId:  b.ViewId,
+			client:  bluecat.NewClient(b.BaseUrl, b.Username, b.Password),
 		}
 	}
 
