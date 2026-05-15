@@ -10,6 +10,7 @@
     "baseUrl": "{{ .bluecat_api_baseUrl }}",
     "username": "{{ .bluecat_api_username }}",
     "password": "{{ .bluecat_api_password }}",
+    "configurationId": "{{ .bluecat_configurationId }}",
     "viewId": "{{ .bluecat_viewId }}"
   },
   "cidrFile": "{{ .cidr_file }}",

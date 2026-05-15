@@ -43,11 +43,12 @@ type ProxyBackend struct {
 }
 
 type Bluecat struct {
-	Account  string
-	BaseUrl  string
-	Username string
-	Password string
-	ViewId   string
+	Account         string
+	BaseUrl         string
+	Username        string
+	Password        string
+	ConfigurationId string
+	ViewId          string
 }
 
 // Version carries around the API version information
