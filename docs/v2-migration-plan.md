@@ -1,6 +1,6 @@
 # BlueCat v1 -> v2 API Migration Plan for dns-api-go
 
-> **Status:** Phases 1–7 complete on `tl694-rest-v2-migration`, validated end-to-end against Yale BAM-test (Spinup Testing block, 10.5.0.0/26). Read-only + mutation V2Live tests all green; wire-contract snapshot pins the cross-repo shape with `server-api/lib/dns/proteus.rb`. Ready for review/merge.
+> **Status:** Phases 1–7 complete on `tl694-rest-v2-migration`, validated end-to-end against Yale BAM-test (Spinup Testing block, 10.5.0.0/26). Read-only V2Live tests all green; wire-contract snapshot pins the cross-repo shape with `server-api/lib/dns/proteus.rb`. Mutation tests were exercised during development but removed before merge — see §Risks #4. Ready for review/merge.
 
 ## Context
 
@@ -175,7 +175,7 @@ Decision deferred to implementation: whether we keep funnelling through `Entity`
 
 ### Phase 5: Service Migration
 
-**Standing pattern**: each sub-phase adds skip-guarded `internal/services/{service}_v2_live_test.go` exercising read-only operations against BAM-test (Spinup Testing block). Mutating tests (create record, delete IP) gate behind `BLUECAT_V2_ALLOW_MUTATIONS=1` so they don't run by default.
+**Standing pattern**: each sub-phase adds skip-guarded `internal/services/{service}_v2_live_test.go` exercising **read-only** operations against BAM-test (Spinup Testing block). Mutation paths (create record, assign+delete IP) are exercised manually during development but not checked into the committed suite — the Spinup Testing `/26` exists in both BAM-test and BAM-production, and a misconfigured `docker/config.json` could silently target production. See §Risks #4.
 
 **Cleanup carried into Phase 5**: each sub-phase deletes the v1 helpers that lose their last caller as the service migrates. By the end of 5B, `internal/services/helpers.go` is left with just `GetConfigID` and `buildFilter` as originally targeted.
 
@@ -201,7 +201,7 @@ Record-create response decodes the full entity (v2 returns it inline) so no foll
 The bulk of test work landed inside Phases 2/4/5 (unit + skip-guarded live tests per phase). What remains:
 
 - **Wire-contract snapshot**: one test that hits `GET /v2/dns/{acct}/records?type=HostRecord&hint=^…$` through the full handler stack against BAM-test, then asserts the JSON response shape matches what `server-api/lib/dns/proteus.rb` parses — specifically `[i].id` (int) and `[i].properties.addresses` (comma-separated IP string). This is the only test that protects the cross-repo contract.
-- **Smoke check**: `BLUECAT_V2_CONFIG=… go test ./... -run V2Live` runs all skip-guarded live tests across Phases 2/4/5 in one pass. Add a short README section pointing developers at this command and the `BLUECAT_V2_ALLOW_MUTATIONS` gate.
+- **Smoke check**: `BLUECAT_V2_CONFIG=… go test ./... -run V2Live` runs all skip-guarded live tests across Phases 2/4/5 in one pass. Add a short README section pointing developers at this command and the no-mutation-tests policy.
 - Audit `MockServer.MakeRequestFunc` callbacks — any v1 pipe-delimited fixtures still in tests get replaced with v2 JSON. (Most will have been deleted in Phase 3 alongside the handlers they tested.)
 
 ### Phase 7: Cleanup
@@ -243,7 +243,7 @@ The bulk of test work landed inside Phases 2/4/5 (unit + skip-guarded live tests
 1. **Wire contract to `server-api`**: the GET `/records` response must preserve `[i].id` and `[i].properties.addresses` as a comma-separated string. Phase 6's contract snapshot is the single test that protects this. Highest blast radius if it drifts — server-api silently degrades.
 2. **`range:eq('{cidr}')` reliability for `parentIdFromCidr`**: this is the one v2 simplification in Phase 5B that hasn't been live-validated yet. If the filter doesn't behave as expected, fall back to the v1 probe-walk pattern (translated to v2 calls) rather than blocking the phase.
 3. **`server-api` propagates `err.Error()` to clients in places**. Phase 2's switch to `*BluecatAPIError` changes the error string shape. Worth a focused grep across `server-api/lib/dns/` (smaller surface than `ui/`) before Phase 5 ships, to flag any string-matching on v1 error formats.
-4. **Mutating tests against shared BAM-test**: `BLUECAT_V2_ALLOW_MUTATIONS=1` keeps CI safe but means mutation paths only run on developer opt-in. Document in the README so it doesn't lead to silent regressions.
+4. **Mutating tests against shared BAM-test**: the Spinup Testing `10.5.0.0/26` exists in both BAM-test (10.16.8.40) and BAM-production with the same CIDR and zone names. A live mutation test has no way to tell them apart at the wire level — a swapped `docker/config.json` or stale env var would silently allocate real IPs and create real DNS records in production. Mutation tests were exercised manually during 5A/5B development and then removed from the committed suite before merge. If mutation coverage is needed in the future, run it against a known-safe sandbox out-of-band.
 5. ~~**Filter predicate syntax**~~, ~~**body retry bug**~~, ~~**`basicAuthenticationCredentials` encoding**~~, ~~**MACPool collection unvalidated**~~ — Phase 5E retired (no consumer), MAC paths deleted in Phase 3, so the macPool risk goes with it.
 
 ## Verification
@@ -254,7 +254,7 @@ Each phase ships with both unit tests (`httptest` / mocks) **and** skip-guarded 
 2. **Phase 2**: ✅ `go test ./internal/api/...` offline + `BLUECAT_V2_CONFIG=… go test ./internal/api/ -run V2Live`.
 3. **Phase 3**: `go build ./...` and `go test ./...` both green after the deletions. No new tests required; the deleted code's tests go with it.
 4. **Phase 4**: ✅ `go build ./...` and `go test ./...` green. `go test ./internal/models/ -run V2 -v` runs 7 cases (unmarshal + ToEntity + collection) against captured v2 fixtures.
-5. **Phase 5**: Per-service live tests pass read-only; mutating tests pass under `BLUECAT_V2_ALLOW_MUTATIONS=1`.
+5. **Phase 5**: Per-service live tests pass read-only against BAM-test.
 6. **Phase 6**: Wire contract snapshot passes against BAM-test; `go test ./... -run V2Live` is a single command that runs every live test in the repo.
 7. **End-to-end**: Deploy to test environment, exercise `server-api` zone-add flows (host record create + delete, IP assign + release) against the new dns-api-go build.
 

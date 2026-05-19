@@ -7,30 +7,21 @@ package services
 // actually returns.
 //
 // Skip-guarded — see loadV2Env in v2_validation_test.go for credential
-// sources. Read-only tests run by default; mutation tests are gated behind
-// BLUECAT_V2_ALLOW_MUTATIONS=1 so CI / casual runs don't write to the
-// shared BAM-test instance.
+// sources. Read-only by design: a v2 BAM lookup against the production
+// instance is fine, but create/delete round-trips against a shared BAM
+// (no way to distinguish prod from test at the wire level when the same
+// Spinup Testing /26 exists in both) are too risky to leave in the
+// committed suite. If you need mutation coverage, run it manually
+// against a known-safe sandbox.
 //
 // Run with:
 //   go test ./internal/services/ -run V2Live -v
-//   BLUECAT_V2_ALLOW_MUTATIONS=1 go test ./internal/services/ -run V2Live -v
 
 import (
-	"dns-api-go/internal/common"
 	"dns-api-go/internal/types"
 	"errors"
-	"fmt"
-	"os"
 	"testing"
-	"time"
 )
-
-func mutationsAllowed(t *testing.T) {
-	t.Helper()
-	if os.Getenv("BLUECAT_V2_ALLOW_MUTATIONS") != "1" {
-		t.Skip("mutation tests gated; set BLUECAT_V2_ALLOW_MUTATIONS=1 to run")
-	}
-}
 
 // TestV2Live_RecordService_HostRecordSearch drives GetRecordsByType against
 // the spinuptest zone via the global resourceRecords filter path. Validates
@@ -113,65 +104,5 @@ func TestV2Live_RecordService_GetEntity_NotFound(t *testing.T) {
 	var notFound *ErrEntityNotFound
 	if !errors.As(err, &notFound) {
 		t.Errorf("err = %v (type %T), want *ErrEntityNotFound", err, err)
-	}
-}
-
-// TestV2Live_RecordService_CreateAndDeleteExternalHost exercises the
-// mutation path that doesn't require IP allocation. ExternalHostRecord
-// creates land in the view's ExternalHostsZone — a single POST + DELETE
-// round-trip. Uses a timestamped name so re-runs and concurrent runs don't
-// collide on the AlreadyExists preflight.
-//
-// If the test fails between create and delete, the record will linger in
-// BAM-test until manually cleaned up — accept that risk for the mutation
-// gate's narrow blast radius.
-func TestV2Live_RecordService_CreateAndDeleteExternalHost(t *testing.T) {
-	mutationsAllowed(t)
-
-	c := newV2Client(t)
-	rs := NewRecordService(c)
-
-	if c.viewID == 0 {
-		t.Skip("viewId not in test config; ExternalHostRecord create needs a view")
-	}
-
-	name := fmt.Sprintf("claude-5a-%d.test.invalid", time.Now().UnixNano())
-
-	created, err := rs.CreateRecord(types.EXTERNALHOST, map[string]interface{}{
-		"name": name,
-	}, c.viewID)
-	if err != nil {
-		t.Fatalf("CreateRecord ExternalHost: %v", err)
-	}
-	if created.ID == 0 {
-		t.Fatal("created record has zero ID; cannot delete safely")
-	}
-	t.Logf("created ExternalHostRecord id=%d name=%s", created.ID, name)
-
-	t.Cleanup(func() {
-		// Best-effort cleanup. If the in-body delete below already succeeded,
-		// this returns ErrEntityNotFound which is fine to swallow.
-		if err := rs.DeleteEntity(created.ID); err != nil {
-			var notFound *ErrEntityNotFound
-			if errors.As(err, &notFound) {
-				return
-			}
-			t.Logf("cleanup DeleteEntity(%d): %v", created.ID, err)
-		}
-	})
-
-	if err := rs.DeleteEntity(created.ID); err != nil {
-		t.Fatalf("DeleteEntity(%d): %v", created.ID, err)
-	}
-
-	// Verify gone.
-	if _, err := rs.GetEntity(created.ID, false); err == nil {
-		t.Errorf("GetEntity(%d) succeeded after delete; expected ErrEntityNotFound", created.ID)
-	} else {
-		var notFound *ErrEntityNotFound
-		var bcErr *common.BluecatAPIError
-		if !errors.As(err, &notFound) && !errors.As(err, &bcErr) {
-			t.Errorf("post-delete GetEntity err = %v (%T), want ErrEntityNotFound or 404", err, err)
-		}
 	}
 }
