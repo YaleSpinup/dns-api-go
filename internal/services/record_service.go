@@ -455,6 +455,19 @@ func (rs *RecordService) resolveExternalHostsZone(viewId int) (int, error) {
 // path is intentional — if the 3rd of 4 IPs fails to allocate, the first 2
 // allocations need to be undone.
 func (rs *RecordService) resolveOrAllocateAddresses(ips []string, udfs map[string]interface{}) ([]v2AddressRef, []int, error) {
+	// When the caller supplied no UDFs but we're about to create new
+	// Address resources, fall back to defaults so we don't trip BAM's
+	// required-UDF validation. server-api's create_host_record flow
+	// notably sends no `properties` field, so without this fallback the
+	// auto-allocation path would 400 with "'userDefinedFields.phone' is a
+	// required field". The defaults apply only to the Address POSTs in
+	// this loop — the HostRecord body's UDFs (set in buildHostRecordBody)
+	// are independent.
+	allocUDFs := udfs
+	if len(allocUDFs) == 0 {
+		allocUDFs = defaultAddressUDFs()
+	}
+
 	refs := make([]v2AddressRef, 0, len(ips))
 	var allocated []int
 	for _, ip := range ips {
@@ -477,7 +490,7 @@ func (rs *RecordService) resolveOrAllocateAddresses(ips []string, udfs map[strin
 			return refs, allocated, fmt.Errorf("locating network for %s: %w", ip, err)
 		}
 
-		created, err := rs.allocateAddressInNetwork(netID, ip, udfs)
+		created, err := rs.allocateAddressInNetwork(netID, ip, allocUDFs)
 		if err != nil {
 			return refs, allocated, fmt.Errorf("allocating address %s: %w", ip, err)
 		}

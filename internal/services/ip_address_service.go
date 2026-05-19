@@ -198,9 +198,15 @@ func (ips *IpAddressService) allocateAddress(parentId int, hostname, macAddress 
 	if macAddress != "" {
 		body["macAddress"] = map[string]string{"address": macAddress}
 	}
-	if udfs := userDefinedFieldsFromProperties(properties); len(udfs) > 0 {
-		body["userDefinedFields"] = udfs
+	udfs := userDefinedFieldsFromProperties(properties)
+	if len(udfs) == 0 {
+		// Defense in depth: server-api's assign_ip currently always sends
+		// UDFs, but any future caller (or a v2 reshuffling) that calls
+		// AssignIpAddress without them would otherwise trip BAM's
+		// required-UDF validation. See defaultAddressUDFs doc.
+		udfs = defaultAddressUDFs()
 	}
+	body["userDefinedFields"] = udfs
 
 	encoded, err := json.Marshal(body)
 	if err != nil {

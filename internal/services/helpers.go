@@ -74,6 +74,30 @@ var coreFieldKeys = map[string]struct{}{
 	"ttl":               {},
 }
 
+// defaultAddressUDFs returns the minimum user-defined field set required
+// when allocating a v2 IPv4Address against Yale's BAM, used as a fallback
+// when the caller supplied no UDFs of its own.
+//
+// server-api's `assign_ip` flow passes these explicitly (see
+// server-api/lib/actions/server/base.rb:899 — hardcoded `phone=xxx`).
+// Its `create_host_record` flow does NOT pass properties, so a v2
+// auto-allocation from CreateRecord would otherwise reach BAM with no
+// `userDefinedFields` and get rejected with
+// `'userDefinedFields.phone' is a required field`.
+//
+// Under v1, BAM silently auto-created Address resources during
+// addHostRecord and didn't validate UDFs; v2 splits the operation and
+// validates strictly, so dns-api-go has to fill the gap. `phone=xxx`
+// matches the literal that server-api uses elsewhere so the wire
+// contract stays consistent. If Yale's BAM ever requires additional
+// UDFs we'll see another `MissingRequiredField` error and add them
+// here — making this config-driven is the proper follow-up.
+func defaultAddressUDFs() map[string]interface{} {
+	return map[string]interface{}{
+		"phone": "xxx",
+	}
+}
+
 // userDefinedFieldsFromProperties extracts user-defined fields from the
 // v1-shaped properties map (key=value pairs that the handlers parse from a
 // pipe-delimited string). v2 requires UDFs to live under the

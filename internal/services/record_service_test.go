@@ -476,6 +476,55 @@ func TestRecordService_CreateRecord_Host_PropagatesUserDefinedFields(t *testing.
 	}
 }
 
+// When server-api calls create_host_record (which sends no `properties`)
+// and the IP isn't yet a v2 Address, the auto-allocation must still ship
+// `userDefinedFields.phone` to satisfy Yale's BAM. dns-api-go falls back
+// to the hardcoded defaults whenever the caller-supplied UDF set is
+// empty.
+func TestRecordService_CreateRecord_Host_FallsBackToDefaultUDFsForAllocation(t *testing.T) {
+	addrUDFsSeen := map[string]interface{}{}
+	ss := newScriptedServer(nil)
+	ss.mock.MakeRequestFunc = func(method, route, queryParam string, body io.Reader) ([]byte, error) {
+		switch {
+		case method == "GET" && route == "/api/v2/resourceRecords":
+			return []byte(`{"count":0,"data":[]}`), nil
+		case method == "GET" && route == "/api/v2/views/100902/zones":
+			return []byte(`{"count":1,"data":[{"id":100911}]}`), nil
+		case method == "GET" && route == "/api/v2/zones/100911/zones":
+			return []byte(`{"count":1,"data":[{"id":100913}]}`), nil
+		case method == "GET" && route == "/api/v2/addresses":
+			return []byte(`{"count":0,"data":[]}`), nil
+		case method == "GET" && route == "/api/v2/networks":
+			return []byte(`{"count":1,"data":[{"id":200001}]}`), nil
+		case method == "POST" && route == "/api/v2/networks/200001/addresses":
+			b, _ := io.ReadAll(body)
+			var got map[string]interface{}
+			_ = json.Unmarshal(b, &got)
+			if udfs, ok := got["userDefinedFields"].(map[string]interface{}); ok {
+				addrUDFsSeen = udfs
+			}
+			return []byte(`{"id":3000123,"type":"IPv4Address","address":"10.5.99.99","state":"STATIC"}`), nil
+		case method == "POST" && route == "/api/v2/zones/100913/resourceRecords":
+			return []byte(`{"id":3000200,"type":"HostRecord","name":"example","absoluteName":"example.spinuptest.internal"}`), nil
+		}
+		return nil, errorf("unexpected %s %s", method, route)
+	}
+
+	rs := NewRecordService(ss.mock)
+	// No "properties" key — matches server-api's create_host_record payload
+	// shape exactly (it sends only type/record/target).
+	_, err := rs.CreateRecord(types.HOSTRECORD, map[string]interface{}{
+		"absoluteName": "example.spinuptest.internal",
+		"addresses":    []string{"10.5.99.99"},
+	}, 100902)
+	if err != nil {
+		t.Fatalf("CreateRecord: %v", err)
+	}
+	if addrUDFsSeen["phone"] != "xxx" {
+		t.Errorf("address POST userDefinedFields = %v, want fallback {phone: xxx}", addrUDFsSeen)
+	}
+}
+
 // HostCreate auto-allocates a v2 Address when BAM doesn't yet know the IP
 // (preserves the v1 addHostRecord behavior server-api depends on). The
 // flow: filter by address:eq → empty, range:contains → find network,
