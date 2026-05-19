@@ -146,64 +146,87 @@ func (s *server) getToken() (string, error) {
 }
 
 func (s *server) MakeRequest(method, route, queryParam string, body io.Reader) ([]byte, error) {
-	// Construct the API URL
 	apiURL := s.bluecat.baseUrl + route
 	if queryParam != "" {
 		apiURL += "?" + queryParam
 	}
-	token, err := s.getToken()
 	logger.Debug("API URL", zap.String("URL", apiURL))
 
-	// Create a new HTTP request
-	req, err := http.NewRequest(strings.ToUpper(method), apiURL, body)
-	if err != nil {
-		return nil, fmt.Errorf("error creating HTTP request: %v", err)
+	// Buffer the body once so it can be replayed on a 401-driven retry.
+	// The pre-v2 code passed the original io.Reader through and silently
+	// failed retries with non-empty bodies (already consumed by the first
+	// attempt).
+	var bodyBytes []byte
+	if body != nil {
+		var err error
+		bodyBytes, err = io.ReadAll(body)
+		if err != nil {
+			return nil, fmt.Errorf("error reading request body: %v", err)
+		}
 	}
 
-	req.Header.Set("Authorization", token)
-	req.Header.Set("Content-Type", "application/json") // Set Content-Type header
+	client := bluecatHTTPClient()
+	const maxAttempts = 2
 
-	// Send the HTTP request
-	client := &http.Client{
-		Timeout: 120 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		token, err := s.getToken()
+		if err != nil {
+			return nil, fmt.Errorf("error obtaining auth token: %v", err)
+		}
+
+		var reqBody io.Reader
+		if bodyBytes != nil {
+			reqBody = bytes.NewReader(bodyBytes)
+		}
+		req, err := http.NewRequest(strings.ToUpper(method), apiURL, reqBody)
+		if err != nil {
+			return nil, fmt.Errorf("error creating HTTP request: %v", err)
+		}
+		req.Header.Set("Authorization", "Basic "+token)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/hal+json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("error sending HTTP request: %v", err)
+		}
+
+		respBody, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("error reading response body: %v", err)
+		}
+
+		// One-shot retry on 401: clear the cached session and re-auth.
+		// Bounded to a single retry so a persistent 401 surfaces as an error
+		// instead of looping.
+		if resp.StatusCode == http.StatusUnauthorized && attempt < maxAttempts {
+			logger.Warn("Unauthorized: token expired or invalid; rotating session",
+				zap.String("route", route),
+				zap.String("queryParam", queryParam))
+			s.bluecat.tokenLock.Lock()
+			s.bluecat.token = ""
+			s.bluecat.sessionID = 0
+			s.bluecat.tokenLock.Unlock()
+			continue
+		}
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			logger.Error("Non-2xx status from BlueCat API",
+				zap.Int("StatusCode", resp.StatusCode),
+				zap.String("Body", string(respBody)))
+			return nil, &BluecatAPIError{StatusCode: resp.StatusCode, Body: string(respBody)}
+		}
+
+		if resp.StatusCode == http.StatusNoContent {
+			return []byte{}, nil
+		}
+
+		return respBody, nil
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error sending HTTP request: %v", err)
-	}
-	defer resp.Body.Close()
 
-	// Read the response body
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %v", err)
-	}
-
-	// Check the response status code
-	if resp.StatusCode == http.StatusUnauthorized {
-		logger.Warn("Unauthorized: Token expired or invalid. Generating a new token.",
-			zap.String("route", route),
-			zap.String("queryParam", queryParam))
-
-		// Clear the current token
-		s.bluecat.tokenLock.Lock()
-		s.bluecat.token = ""
-		s.bluecat.tokenLock.Unlock()
-
-		return s.MakeRequest(method, route, queryParam, body)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		logger.Error("Unexpected status code received from API",
-			zap.Int("StatusCode", resp.StatusCode),
-			zap.String("Body", string(respBody)))
-		return nil, fmt.Errorf("unexpected status code: %d, Body: %s", resp.StatusCode, string(respBody))
-	}
-
-	return respBody, nil
+	// Unreachable: the loop always returns or continues.
+	return nil, fmt.Errorf("MakeRequest exhausted %d attempts", maxAttempts)
 }
 
 // respond writes the response to the client
