@@ -18,9 +18,11 @@ package api
 
 import (
 	"dns-api-go/logger"
+	"encoding/json"
+	"fmt"
 	"go.uber.org/zap"
 	"net/http"
-	"strings"
+	"net/url"
 )
 
 func (s *server) HomeHandler(w http.ResponseWriter, _ *http.Request) {
@@ -42,24 +44,38 @@ func (s *server) VersionHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *server) SystemInfoHandler(w http.ResponseWriter, _ *http.Request) {
-	body, err := s.MakeRequest("GET", "/getSystemInfo", "", nil)
+	query := "filter=" + url.QueryEscape("type:eq('SystemSettings')")
+	body, err := s.MakeRequest("GET", "/api/v2/settings", query, nil)
 	if err != nil {
-		logger.Error("Failed to retrieve system info",
-			zap.Error(err))
+		logger.Error("Failed to retrieve system info", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Parse the response body into a map
-	info := make(map[string]string)
-	pairs := strings.Split(string(body), "|")
-	for _, pair := range pairs {
-		kv := strings.Split(pair, "=")
-		if len(kv) == 2 {
-			info[kv[0]] = kv[1]
-		}
+	var page struct {
+		Count int                      `json:"count"`
+		Data  []map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &page); err != nil {
+		logger.Error("Failed to decode system info response", zap.Error(err))
+		http.Error(w, "invalid system info response", http.StatusInternalServerError)
+		return
+	}
+	if len(page.Data) == 0 {
+		logger.Error("System info response had no SystemSettings entry")
+		http.Error(w, "system info unavailable", http.StatusInternalServerError)
+		return
 	}
 
-	// Encode the map as JSON and write it to the response
+	// Flatten the v2 entity to map[string]string (matching v1's contract).
+	// _links is HAL plumbing, not info — drop it.
+	info := make(map[string]string, len(page.Data[0]))
+	for k, v := range page.Data[0] {
+		if k == "_links" {
+			continue
+		}
+		info[k] = fmt.Sprintf("%v", v)
+	}
+
 	s.respond(w, info, http.StatusOK)
 }
