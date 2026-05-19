@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"crypto/tls"
 	"dns-api-go/logger"
 	"encoding/json"
@@ -15,47 +16,118 @@ import (
 	"time"
 )
 
-func (s *server) generateAuthToken(username, password string) (string, error) {
-	// Construct the login URL
-	loginURL := fmt.Sprintf("%s/login?username=%s&password=%s", s.bluecat.baseUrl, username, password)
-	logger.Debug("Login URL", zap.String("URL", loginURL))
-
-	client := &http.Client{
+// bluecatHTTPClient builds an http.Client matching the existing TLS posture
+// (Yale BlueCat presents a self-signed cert; v1 also skipped verification).
+func bluecatHTTPClient() *http.Client {
+	return &http.Client{
 		Timeout: 120 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 	}
+}
 
-	// Send the login request using the custom http.Client
-	resp, err := client.Get(loginURL)
+// generateAuthToken opens a BlueCat v2 session and returns the pre-encoded
+// basicAuthenticationCredentials suitable for an Authorization: Basic header.
+// As a side effect it stashes the session ID on s.bluecat so logout() can
+// target it. Callers must hold s.bluecat.tokenLock.
+func (s *server) generateAuthToken(username, password string) (string, error) {
+	loginURL := s.bluecat.baseUrl + "/api/v2/sessions"
+	logger.Debug("Login URL", zap.String("URL", loginURL))
+
+	payload, err := json.Marshal(map[string]string{
+		"type":     "UserSession",
+		"username": username,
+		"password": password,
+	})
+	if err != nil {
+		return "", fmt.Errorf("marshal login payload: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, loginURL, bytes.NewReader(payload))
+	if err != nil {
+		return "", fmt.Errorf("build login request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/hal+json")
+
+	resp, err := bluecatHTTPClient().Do(req)
 	if err != nil {
 		logger.Error("Error sending login request", zap.Error(err))
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Error("Error reading login response body", zap.Error(err))
 		return "", err
 	}
 
-	// Check the response status code
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusCreated {
 		logger.Error("Login failed with status code",
 			zap.Int("StatusCode", resp.StatusCode),
 			zap.String("Body", string(body)))
-		return "", fmt.Errorf("login failed: %s", string(body))
+		return "", fmt.Errorf("login failed: status %d, body: %s", resp.StatusCode, string(body))
 	}
 
-	// Extract the token from the response body
-	token := strings.TrimPrefix(string(body), "\"Session Token-> ")
-	token = strings.TrimSuffix(token, " <- for User : "+username+"\"")
-	logger.Debug("Generated authentication token", zap.String("Token", token))
+	var out struct {
+		ID                             int    `json:"id"`
+		APIToken                       string `json:"apiToken"`
+		BasicAuthenticationCredentials string `json:"basicAuthenticationCredentials"`
+		State                          string `json:"state"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", fmt.Errorf("decode login response: %w; body: %s", err, string(body))
+	}
+	if out.BasicAuthenticationCredentials == "" {
+		return "", fmt.Errorf("login response missing basicAuthenticationCredentials; body: %s", string(body))
+	}
 
-	return token, nil
+	s.bluecat.sessionID = out.ID
+	logger.Debug("Opened v2 session", zap.Int("sessionID", out.ID), zap.String("state", out.State))
+
+	return out.BasicAuthenticationCredentials, nil
+}
+
+// logout closes the active BlueCat v2 session. Safe to call when no session
+// is open; returns nil in that case. Errors are logged but not surfaced to
+// callers since logout is best-effort.
+func (s *server) logout() error {
+	s.bluecat.tokenLock.Lock()
+	defer s.bluecat.tokenLock.Unlock()
+
+	if s.bluecat.sessionID == 0 || s.bluecat.token == "" {
+		return nil
+	}
+
+	req, err := http.NewRequest(http.MethodPatch,
+		s.bluecat.baseUrl+"/api/v2/sessions/current",
+		strings.NewReader(`{"state":"LOGGED_OUT"}`))
+	if err != nil {
+		return fmt.Errorf("build logout request: %w", err)
+	}
+	req.Header.Set("Authorization", "Basic "+s.bluecat.token)
+	req.Header.Set("Content-Type", "application/merge-patch+json")
+	req.Header.Set("Accept", "application/hal+json")
+
+	resp, err := bluecatHTTPClient().Do(req)
+	if err != nil {
+		logger.Warn("logout request failed", zap.Error(err))
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		logger.Warn("logout returned non-2xx",
+			zap.Int("StatusCode", resp.StatusCode),
+			zap.String("Body", string(body)))
+	}
+
+	s.bluecat.token = ""
+	s.bluecat.sessionID = 0
+	return nil
 }
 
 func (s *server) getToken() (string, error) {

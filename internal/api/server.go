@@ -59,6 +59,7 @@ type bluecat struct {
 	user      string
 	password  string
 	token     string
+	sessionID int
 	tokenLock sync.Mutex
 	viewId    string
 }
