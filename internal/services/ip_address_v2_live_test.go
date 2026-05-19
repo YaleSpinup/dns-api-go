@@ -16,28 +16,30 @@ import (
 	"time"
 )
 
+// spinupTestCIDR is the Spinup Testing leaf network in Yale BAM-test
+// (10.5.0.0/16 block, /26 leaf). All live mutation tests in dns-api-go
+// allocate against this range so they stay scoped to the Spinup-owned
+// portion of BAM-test. If BAM ever moves Spinup Testing, update here.
+const spinupTestCIDR = "10.5.0.0/26"
+
 // TestV2Live_IpAddressService_ParentIDFromCIDR exercises the v2 range-filter
 // simplification flagged in the plan as the one Phase 5B path that hadn't
-// been live-validated. Uses the Spinup Testing block's CIDR.
+// been live-validated. Targets the Spinup Testing /26 directly.
 //
-// If this test fails because BAM-test rejects `range:eq(...)` or returns
-// no match, fall back to the v1 probe-walk pattern in ParentIDFromCIDR
-// rather than blocking the phase — see plan §Risks #2.
+// If this test ever fails because BAM rejects `range:eq(...)`, fall back to
+// the v1 probe-walk pattern in ParentIDFromCIDR — see plan §Risks #2.
 func TestV2Live_IpAddressService_ParentIDFromCIDR(t *testing.T) {
 	c := newV2Client(t)
 	ips := NewIpAddressService(c)
 
-	cidr := "10.5.0.0/24"
-	id, err := ips.ParentIDFromCIDR(cidr)
+	id, err := ips.ParentIDFromCIDR(spinupTestCIDR)
 	if err != nil {
-		t.Fatalf("ParentIDFromCIDR(%q): %v\n"+
-			"If this is the first time range:eq has been tried live, double-check the "+
-			"OpenAPI filter grammar — the fallback is the v1 probe-walk.", cidr, err)
+		t.Fatalf("ParentIDFromCIDR(%q): %v", spinupTestCIDR, err)
 	}
 	if id == 0 {
-		t.Errorf("ParentIDFromCIDR(%q) returned id=0, want positive network ID", cidr)
+		t.Errorf("ParentIDFromCIDR(%q) = 0, want positive network ID", spinupTestCIDR)
 	}
-	t.Logf("network id for %s = %d", cidr, id)
+	t.Logf("range:eq('%s') → id=%d ✓", spinupTestCIDR, id)
 }
 
 // TestV2Live_IpAddressService_GetIpAddress_NotFound confirms the
@@ -75,9 +77,9 @@ func TestV2Live_IpAddressService_AssignAndDelete(t *testing.T) {
 		t.Skip("viewId not in test config; host-record creation needs a view")
 	}
 
-	parentID, err := ips.ParentIDFromCIDR("10.5.0.0/24")
+	parentID, err := ips.ParentIDFromCIDR(spinupTestCIDR)
 	if err != nil {
-		t.Fatalf("resolve parent for 10.5.0.0/24: %v", err)
+		t.Fatalf("resolve parent for %s: %v", spinupTestCIDR, err)
 	}
 
 	hostname := fmt.Sprintf("claude-5b-%d.spinuptest.internal", time.Now().UnixNano())

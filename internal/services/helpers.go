@@ -79,20 +79,25 @@ func splitFQDN(server interfaces.ServerInterface, absoluteName string, viewId in
 // "spinuptest.internal" with view 100902 → first matches Zone(name='internal')
 // under views/100902/zones, then Zone(name='spinuptest') under zones/{id}/zones.
 //
-// type:eq('Zone') is always included to avoid the ExternalHostsZone collision
-// flagged in the Phase 1 findings.
+// At the view level, type:eq('Zone') disambiguates between Zone and
+// ExternalHostsZone (which can share a name — Phase 1 finding). At deeper
+// levels the type filter is rejected by BAM with HTTP 400
+// InvalidFilterField — sub-zones of a Zone can only be type=Zone anyway,
+// so dropping the predicate is both safe and required.
 func resolveZoneIDFromLabels(server interfaces.ServerInterface, zoneLabels []string, viewId int) (int, error) {
 	if len(zoneLabels) == 0 {
 		return 0, fmt.Errorf("no zone labels to resolve")
 	}
 	collectionRoute := fmt.Sprintf("/api/v2/views/%d/zones", viewId)
+	atViewLevel := true
 	var zoneID int
 	for i := len(zoneLabels) - 1; i >= 0; i-- {
 		label := zoneLabels[i]
-		query := buildFilter(
-			fmt.Sprintf("name:eq('%s')", label),
-			"type:eq('Zone')",
-		) + "&limit=1"
+		predicates := []string{fmt.Sprintf("name:eq('%s')", label)}
+		if atViewLevel {
+			predicates = append(predicates, "type:eq('Zone')")
+		}
+		query := buildFilter(predicates...) + "&limit=1"
 		resp, err := server.MakeRequest("GET", collectionRoute, query, nil)
 		if err != nil {
 			return 0, fmt.Errorf("looking up zone %q under %s: %w", label, collectionRoute, err)
@@ -108,6 +113,7 @@ func resolveZoneIDFromLabels(server interfaces.ServerInterface, zoneLabels []str
 		}
 		zoneID = col.Data[0].ID
 		collectionRoute = fmt.Sprintf("/api/v2/zones/%d/zones", zoneID)
+		atViewLevel = false
 	}
 	return zoneID, nil
 }
