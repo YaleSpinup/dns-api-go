@@ -398,6 +398,84 @@ func TestRecordService_DeleteEntity_RejectsNonRecordType(t *testing.T) {
 	}
 }
 
+// HostCreate threads server-api's `properties` map through as
+// userDefinedFields on BOTH the Address allocation and the HostRecord
+// body. Yale's prod BAM rejects v2 POSTs that omit configured required
+// UDFs (e.g. `phone`); core fields like reverseRecord still come out of
+// the same map as top-level body keys, not UDFs.
+func TestRecordService_CreateRecord_Host_PropagatesUserDefinedFields(t *testing.T) {
+	addrBodySeen := false
+	recordBodySeen := false
+	ss := newScriptedServer(nil)
+	ss.mock.MakeRequestFunc = func(method, route, queryParam string, body io.Reader) ([]byte, error) {
+		switch {
+		case method == "GET" && route == "/api/v2/resourceRecords":
+			return []byte(`{"count":0,"data":[]}`), nil
+		case method == "GET" && route == "/api/v2/views/100902/zones":
+			return []byte(`{"count":1,"data":[{"id":100911}]}`), nil
+		case method == "GET" && route == "/api/v2/zones/100911/zones":
+			return []byte(`{"count":1,"data":[{"id":100913}]}`), nil
+		case method == "GET" && route == "/api/v2/addresses":
+			return []byte(`{"count":0,"data":[]}`), nil
+		case method == "GET" && route == "/api/v2/networks":
+			return []byte(`{"count":1,"data":[{"id":200001}]}`), nil
+		case method == "POST" && route == "/api/v2/networks/200001/addresses":
+			addrBodySeen = true
+			b, _ := io.ReadAll(body)
+			var got map[string]interface{}
+			_ = json.Unmarshal(b, &got)
+			udfs, ok := got["userDefinedFields"].(map[string]interface{})
+			if !ok {
+				t.Errorf("address body missing userDefinedFields: %s", string(b))
+			} else if udfs["phone"] != "555-1212" {
+				t.Errorf("address userDefinedFields.phone = %v, want 555-1212", udfs["phone"])
+			}
+			// reverseRecord must NOT show up as a UDF on the address — it's
+			// a HostRecord core field; an address with a stray
+			// reverseRecord UDF could trip Yale's BAM schema validator.
+			if _, leaked := udfs["reverseRecord"]; leaked {
+				t.Errorf("reverseRecord leaked into address userDefinedFields: %v", udfs)
+			}
+			return []byte(`{"id":3000123,"type":"IPv4Address","address":"10.5.99.99","state":"STATIC"}`), nil
+		case method == "POST" && route == "/api/v2/zones/100913/resourceRecords":
+			recordBodySeen = true
+			b, _ := io.ReadAll(body)
+			var got map[string]interface{}
+			_ = json.Unmarshal(b, &got)
+			if got["reverseRecord"] != true {
+				t.Errorf("host record body reverseRecord = %v, want true (top-level, not in UDFs)", got["reverseRecord"])
+			}
+			udfs, ok := got["userDefinedFields"].(map[string]interface{})
+			if !ok {
+				t.Errorf("host record body missing userDefinedFields: %s", string(b))
+			} else if udfs["phone"] != "555-1212" {
+				t.Errorf("host record userDefinedFields.phone = %v, want 555-1212", udfs["phone"])
+			}
+			return []byte(`{"id":3000200,"type":"HostRecord","name":"example","absoluteName":"example.spinuptest.internal"}`), nil
+		}
+		return nil, errorf("unexpected %s %s", method, route)
+	}
+
+	rs := NewRecordService(ss.mock)
+	_, err := rs.CreateRecord(types.HOSTRECORD, map[string]interface{}{
+		"absoluteName": "example.spinuptest.internal",
+		"addresses":    []string{"10.5.99.99"},
+		"properties": map[string]string{
+			"phone":         "555-1212",
+			"reverseRecord": "true",
+		},
+	}, 100902)
+	if err != nil {
+		t.Fatalf("CreateRecord: %v", err)
+	}
+	if !addrBodySeen {
+		t.Error("address POST never happened")
+	}
+	if !recordBodySeen {
+		t.Error("host record POST never happened")
+	}
+}
+
 // HostCreate auto-allocates a v2 Address when BAM doesn't yet know the IP
 // (preserves the v1 addHostRecord behavior server-api depends on). The
 // flow: filter by address:eq → empty, range:contains → find network,

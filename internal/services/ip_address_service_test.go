@@ -192,6 +192,78 @@ func TestIpAddressService_AssignIpAddress_RollsBackAddressOnRecordFailure(t *tes
 	}
 }
 
+// AssignIpAddress threads server-api's properties map through as
+// userDefinedFields on BOTH the Address allocation and the HostRecord —
+// Yale's prod BAM rejects v2 POSTs without configured required UDFs
+// (e.g. `phone`). Core keys like hostname/reverseRecord must NOT leak
+// into UDFs.
+func TestIpAddressService_AssignIpAddress_PropagatesUserDefinedFields(t *testing.T) {
+	addrUDFsOK := false
+	recordUDFsOK := false
+	ss := newScriptedServer(nil)
+	ss.mock.MakeRequestFunc = func(method, route, queryParam string, body io.Reader) ([]byte, error) {
+		switch {
+		case method == "POST" && route == "/api/v2/networks/200001/addresses":
+			b, _ := io.ReadAll(body)
+			var got map[string]interface{}
+			_ = json.Unmarshal(b, &got)
+			udfs, ok := got["userDefinedFields"].(map[string]interface{})
+			if !ok {
+				t.Errorf("address body missing userDefinedFields: %s", string(b))
+			} else {
+				if udfs["phone"] != "555-1212" {
+					t.Errorf("address UDF phone = %v, want 555-1212", udfs["phone"])
+				}
+				for _, leak := range []string{"name", "macAddress", "reverseRecord", "address"} {
+					if _, found := udfs[leak]; found {
+						t.Errorf("core field %q leaked into address UDFs: %v", leak, udfs)
+					}
+				}
+				addrUDFsOK = true
+			}
+			return []byte(`{"id":100914,"type":"IPv4Address","address":"10.5.0.10","name":"host","state":"STATIC"}`), nil
+		case method == "GET" && route == "/api/v2/views/100902/zones":
+			return []byte(`{"count":1,"data":[{"id":100911}]}`), nil
+		case method == "GET" && route == "/api/v2/zones/100911/zones":
+			return []byte(`{"count":1,"data":[{"id":100913}]}`), nil
+		case method == "POST" && route == "/api/v2/zones/100913/resourceRecords":
+			b, _ := io.ReadAll(body)
+			var got map[string]interface{}
+			_ = json.Unmarshal(b, &got)
+			udfs, ok := got["userDefinedFields"].(map[string]interface{})
+			if !ok {
+				t.Errorf("host record body missing userDefinedFields: %s", string(b))
+			} else if udfs["phone"] == "555-1212" {
+				recordUDFsOK = true
+			}
+			return []byte(`{"id":100920,"type":"HostRecord","name":"host","absoluteName":"host.spinuptest.internal"}`), nil
+		}
+		return nil, errorf("unexpected %s %s", method, route)
+	}
+
+	ips := NewIpAddressService(ss.mock)
+	_, err := ips.AssignIpAddress("MAKE_STATIC", "02:00:5e:00:00:01", 200001,
+		map[string]string{
+			"hostname":       "host.spinuptest.internal",
+			"viewId":         "100902",
+			"reverseFlag":    "true",
+			"sameAsZoneFlag": "false",
+		},
+		map[string]string{
+			"phone": "555-1212",
+			"name":  "host.spinuptest.internal", // should be filtered out as a core key
+		})
+	if err != nil {
+		t.Fatalf("AssignIpAddress: %v", err)
+	}
+	if !addrUDFsOK {
+		t.Error("address UDFs not propagated correctly")
+	}
+	if !recordUDFsOK {
+		t.Error("host record UDFs not propagated correctly")
+	}
+}
+
 func TestIpAddressService_AssignIpAddress_RejectsMissingHostnameOrView(t *testing.T) {
 	ips := NewIpAddressService(newScriptedServer(nil).mock)
 

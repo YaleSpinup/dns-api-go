@@ -305,13 +305,15 @@ func (rs *RecordService) buildHostRecordBody(parameters map[string]interface{}, 
 		return nil, 0, nil, fmt.Errorf("missing addresses for HostRecord")
 	}
 	ttl, _ := parameters["ttl"].(int)
+	props, _ := parameters["properties"].(map[string]string)
+	udfs := userDefinedFieldsFromProperties(props)
 
 	zoneID, localName, err := splitFQDN(rs.server, absoluteName, viewId)
 	if err != nil {
 		return nil, 0, nil, err
 	}
 
-	addrRefs, allocated, err := rs.resolveOrAllocateAddresses(ips)
+	addrRefs, allocated, err := rs.resolveOrAllocateAddresses(ips, udfs)
 	if err != nil {
 		// Partial allocations get rolled back by the caller via the
 		// returned slice — even on the error path.
@@ -328,6 +330,13 @@ func (rs *RecordService) buildHostRecordBody(parameters map[string]interface{}, 
 	}
 	if reverse, ok := reverseRecordFromProperties(parameters); ok {
 		body["reverseRecord"] = reverse
+	}
+	// The same UDFs apply to the HostRecord itself — Yale's BAM rejects
+	// any v2 resource missing its configured required UDFs, and we don't
+	// know up-front whether `phone` is required on Address only, HostRecord
+	// only, or both. Sending on both is benign when only one enforces.
+	if len(udfs) > 0 {
+		body["userDefinedFields"] = udfs
 	}
 
 	encoded, err := json.Marshal(body)
@@ -445,7 +454,7 @@ func (rs *RecordService) resolveExternalHostsZone(viewId int) (int, error) {
 // HostRecord POST fails. Returning the allocated list even on the error
 // path is intentional — if the 3rd of 4 IPs fails to allocate, the first 2
 // allocations need to be undone.
-func (rs *RecordService) resolveOrAllocateAddresses(ips []string) ([]v2AddressRef, []int, error) {
+func (rs *RecordService) resolveOrAllocateAddresses(ips []string, udfs map[string]interface{}) ([]v2AddressRef, []int, error) {
 	refs := make([]v2AddressRef, 0, len(ips))
 	var allocated []int
 	for _, ip := range ips {
@@ -468,7 +477,7 @@ func (rs *RecordService) resolveOrAllocateAddresses(ips []string) ([]v2AddressRe
 			return refs, allocated, fmt.Errorf("locating network for %s: %w", ip, err)
 		}
 
-		created, err := rs.allocateAddressInNetwork(netID, ip)
+		created, err := rs.allocateAddressInNetwork(netID, ip, udfs)
 		if err != nil {
 			return refs, allocated, fmt.Errorf("allocating address %s: %w", ip, err)
 		}
@@ -523,12 +532,17 @@ func (rs *RecordService) networkIDContainingIP(ip string) (int, error) {
 
 // allocateAddressInNetwork POSTs a state=STATIC IPv4Address with an
 // explicit `address` field — telling BAM to reserve that specific IP
-// (vs. the "next available" semantic used by IpAddressService).
-func (rs *RecordService) allocateAddressInNetwork(netID int, ip string) (*models.V2Address, error) {
+// (vs. the "next available" semantic used by IpAddressService). UDFs
+// are required by some BAMs (Yale's prod requires `phone`) and rejected
+// when missing.
+func (rs *RecordService) allocateAddressInNetwork(netID int, ip string, udfs map[string]interface{}) (*models.V2Address, error) {
 	body := map[string]interface{}{
 		"type":    "IPv4Address",
 		"state":   "STATIC",
 		"address": ip,
+	}
+	if len(udfs) > 0 {
+		body["userDefinedFields"] = udfs
 	}
 	encoded, err := json.Marshal(body)
 	if err != nil {

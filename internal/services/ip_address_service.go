@@ -163,7 +163,7 @@ func (ips *IpAddressService) AssignIpAddress(action string, macAddress string, p
 		return nil, err
 	}
 
-	if _, err := ips.createHostRecordForAddress(viewID, hostname, addr); err != nil {
+	if _, err := ips.createHostRecordForAddress(viewID, hostname, addr, properties); err != nil {
 		// Roll back the address allocation so the next attempt sees a
 		// clean slate. Best-effort: log and continue if the rollback
 		// itself fails.
@@ -184,7 +184,9 @@ func (ips *IpAddressService) AssignIpAddress(action string, macAddress string, p
 
 // allocateAddress POSTs a state=STATIC IPv4Address into the network. With
 // no `address` field, BlueCat picks the next available — the v1
-// /assignNextAvailableIP4Address semantic.
+// /assignNextAvailableIP4Address semantic. User-defined fields from
+// server-api's `properties` map (e.g. Yale's required `phone`) get nested
+// under `userDefinedFields` per the v2 schema.
 func (ips *IpAddressService) allocateAddress(parentId int, hostname, macAddress string, reverseFlag bool, properties map[string]string) (*models.V2Address, error) {
 	body := map[string]interface{}{
 		"type":  "IPv4Address",
@@ -196,11 +198,8 @@ func (ips *IpAddressService) allocateAddress(parentId int, hostname, macAddress 
 	if macAddress != "" {
 		body["macAddress"] = map[string]string{"address": macAddress}
 	}
-	for k, v := range properties {
-		if k == "" || k == "type" || k == "state" || k == "name" || k == "address" || k == "macAddress" {
-			continue
-		}
-		body[k] = v
+	if udfs := userDefinedFieldsFromProperties(properties); len(udfs) > 0 {
+		body["userDefinedFields"] = udfs
 	}
 
 	encoded, err := json.Marshal(body)
@@ -229,9 +228,11 @@ func (ips *IpAddressService) allocateAddress(parentId int, hostname, macAddress 
 }
 
 // createHostRecordForAddress creates a HostRecord under the zone derived
-// from `fqdn`, bound to the supplied address by id. Returns the created
-// V2HostRecord so callers can surface its id if needed.
-func (ips *IpAddressService) createHostRecordForAddress(viewID int, fqdn string, addr *models.V2Address) (*models.V2HostRecord, error) {
+// from `fqdn`, bound to the supplied address by id. UDFs from the
+// AssignIpAddress caller's properties map land on the HostRecord too —
+// BAMs that gate Address allocation on a required UDF generally gate
+// HostRecord creation the same way.
+func (ips *IpAddressService) createHostRecordForAddress(viewID int, fqdn string, addr *models.V2Address, properties map[string]string) (*models.V2HostRecord, error) {
 	zoneID, localName, err := splitFQDN(ips.server, fqdn, viewID)
 	if err != nil {
 		return nil, err
@@ -243,6 +244,9 @@ func (ips *IpAddressService) createHostRecordForAddress(viewID int, fqdn string,
 		"addresses": []map[string]interface{}{
 			{"id": addr.ID, "type": addr.Type},
 		},
+	}
+	if udfs := userDefinedFieldsFromProperties(properties); len(udfs) > 0 {
+		body["userDefinedFields"] = udfs
 	}
 	encoded, err := json.Marshal(body)
 	if err != nil {

@@ -54,6 +54,55 @@ func buildFilter(predicates ...string) string {
 	return "filter=" + url.QueryEscape(strings.Join(predicates, " and "))
 }
 
+// coreFieldKeys are the keys that v1 callers historically stuffed into the
+// pipe-delimited `properties` string but that v2 surfaces as top-level
+// fields on Address / HostRecord bodies. They are NOT user-defined fields
+// and must not go into `userDefinedFields` — the callers already pull
+// them out (or simply don't use them) before building the request body.
+var coreFieldKeys = map[string]struct{}{
+	"":                  {},
+	"type":              {},
+	"state":             {},
+	"address":           {},
+	"addresses":         {},
+	"name":              {},
+	"absoluteName":      {},
+	"macAddress":        {},
+	"reverseRecord":     {},
+	"linkedRecord":      {},
+	"linkedRecordName":  {},
+	"ttl":               {},
+}
+
+// userDefinedFieldsFromProperties extracts user-defined fields from the
+// v1-shaped properties map (key=value pairs that the handlers parse from a
+// pipe-delimited string). v2 requires UDFs to live under the
+// `userDefinedFields` object on resource bodies, not at the top level —
+// Yale's BAM, for example, makes `phone` a required UDF on IPv4Address
+// and rejects allocation POSTs that omit it.
+//
+// Returns nil when there are no UDFs to send (the caller then omits the
+// `userDefinedFields` key entirely rather than sending an empty object).
+func userDefinedFieldsFromProperties(properties map[string]string) map[string]interface{} {
+	if len(properties) == 0 {
+		return nil
+	}
+	udfs := make(map[string]interface{}, len(properties))
+	for k, v := range properties {
+		if _, isCore := coreFieldKeys[k]; isCore {
+			continue
+		}
+		if v == "" {
+			continue
+		}
+		udfs[k] = v
+	}
+	if len(udfs) == 0 {
+		return nil
+	}
+	return udfs
+}
+
 // splitFQDN separates an absolute name into the local record label and the
 // zone ID it should live under. e.g. "host.spinuptest.internal" with view
 // 100902 returns (100913, "host", nil) where 100913 is the spinuptest zone.
