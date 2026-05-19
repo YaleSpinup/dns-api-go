@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 // recordedCall captures a single MakeRequest invocation for assertion.
@@ -537,8 +538,13 @@ func TestRecordService_CreateRecord_Host_FallsBackToDefaultUDFsForAllocation(t *
 			t.Errorf("address UDF %q = %q, want %q (full set: %v)", k, got, want, addrUDFsSeen)
 		}
 	}
-	if regDate, _ := addrUDFsSeen["reg_date"].(string); regDate == "" {
-		t.Errorf("address UDF reg_date is empty, want a timestamp; full UDFs = %v", addrUDFsSeen)
+	// reg_date must parse as RFC 3339 (ISO 8601 with time zone) — v2 BAM
+	// rejects the v1 `2006-01-02 15:04:05` shape with InvalidUdfDateValue.
+	regDate, _ := addrUDFsSeen["reg_date"].(string)
+	if regDate == "" {
+		t.Errorf("address UDF reg_date is empty, want an RFC 3339 timestamp; full UDFs = %v", addrUDFsSeen)
+	} else if _, err := time.Parse(time.RFC3339, regDate); err != nil {
+		t.Errorf("address UDF reg_date = %q, want RFC 3339 (e.g. 2026-05-19T20:30:00Z): %v", regDate, err)
 	}
 }
 

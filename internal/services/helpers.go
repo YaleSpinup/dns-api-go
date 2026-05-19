@@ -97,12 +97,13 @@ var coreFieldKeys = map[string]struct{}{
 // addHostRecord without validating UDFs; v2 splits the operation and
 // validates strictly, so dns-api-go fills the gap here.
 //
-// `reg_date` is computed at call time using the same format
-// (`%Y-%m-%d %H:%M:%S` UTC) as server-api's `time_proteus` helper.
-// `user_name` falls back to a service identifier — dns-api-go has no
-// upstream user context on the create_host_record path. Making this
-// config-driven (so the value set can shift without a code change) is
-// the proper follow-up.
+// `reg_date` is computed at call time in RFC 3339 / ISO 8601 with the
+// `Z` UTC zone designator. v1 BAM accepted server-api's
+// `%Y-%m-%d %H:%M:%S` format silently; v2 enforces ISO 8601 with time
+// zone and rejects v1-format values with InvalidUdfDateValue. `user_name`
+// falls back to a service identifier — dns-api-go has no upstream user
+// context on the create_host_record path. Making this config-driven (so
+// the value set can shift without a code change) is the proper follow-up.
 func defaultAddressUDFs() map[string]interface{} {
 	return map[string]interface{}{
 		"machine_type": "Virtual machine",
@@ -110,7 +111,7 @@ func defaultAddressUDFs() map[string]interface{} {
 		"phone":        "xxx",
 		"location":     "Cloud",
 		"reg_by":       "Spinup",
-		"reg_date":     time.Now().UTC().Format("2006-01-02 15:04:05"),
+		"reg_date":     time.Now().UTC().Format(time.RFC3339),
 		"user_name":    "spinup-dns-api",
 	}
 }
