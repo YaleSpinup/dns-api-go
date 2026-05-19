@@ -18,11 +18,7 @@ package api
 
 import (
 	"dns-api-go/logger"
-	"encoding/json"
-	"fmt"
-	"go.uber.org/zap"
 	"net/http"
-	"net/url"
 )
 
 func (s *server) HomeHandler(w http.ResponseWriter, _ *http.Request) {
@@ -41,41 +37,4 @@ func (s *server) PingHandler(w http.ResponseWriter, _ *http.Request) {
 func (s *server) VersionHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	s.respond(w, s.version, http.StatusOK)
-}
-
-func (s *server) SystemInfoHandler(w http.ResponseWriter, _ *http.Request) {
-	query := "filter=" + url.QueryEscape("type:eq('SystemSettings')")
-	body, err := s.MakeRequest("GET", "/api/v2/settings", query, nil)
-	if err != nil {
-		logger.Error("Failed to retrieve system info", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	var page struct {
-		Count int                      `json:"count"`
-		Data  []map[string]interface{} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &page); err != nil {
-		logger.Error("Failed to decode system info response", zap.Error(err))
-		http.Error(w, "invalid system info response", http.StatusInternalServerError)
-		return
-	}
-	if len(page.Data) == 0 {
-		logger.Error("System info response had no SystemSettings entry")
-		http.Error(w, "system info unavailable", http.StatusInternalServerError)
-		return
-	}
-
-	// Flatten the v2 entity to map[string]string (matching v1's contract).
-	// _links is HAL plumbing, not info — drop it.
-	info := make(map[string]string, len(page.Data[0]))
-	for k, v := range page.Data[0] {
-		if k == "_links" {
-			continue
-		}
-		info[k] = fmt.Sprintf("%v", v)
-	}
-
-	s.respond(w, info, http.StatusOK)
 }

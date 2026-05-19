@@ -65,12 +65,8 @@ type bluecat struct {
 }
 
 type Services struct {
-	BaseService *services.BaseService
-	ZoneService *services.ZoneService
-	NetworkService *services.NetworkService
-	MacAddressService *services.MacAddressService
 	IpAddressService *services.IpAddressService
-	RecordService *services.RecordService
+	RecordService    *services.RecordService
 }
 
 type server struct {
@@ -121,19 +117,9 @@ func NewServer(config common.Config) error {
 	s.cidrFile = config.CIDRFile
 
 	// Define services that interact with Bluecat entities
-	baseService := services.NewBaseService(&s)
-	zoneService := services.NewZoneService(&s)
-	networkService := services.NewNetworkService(&s)
-	macAddressService := services.NewMacAddressService(&s)
-	ipAddressService := services.NewIpAddressService(&s)
-	recordService := services.NewRecordService(&s)
 	s.services = Services{
-		BaseService: baseService,
-		ZoneService: zoneService,
-		NetworkService: networkService,
-		MacAddressService: macAddressService,
-		IpAddressService: ipAddressService,
-		RecordService: recordService,
+		IpAddressService: services.NewIpAddressService(&s),
+		RecordService:    services.NewRecordService(&s),
 	}
 
 	if b := config.ProxyBackend; b != nil {

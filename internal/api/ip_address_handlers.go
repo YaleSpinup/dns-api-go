@@ -141,40 +141,6 @@ func incrementIP(ip net.IP) {
 	}
 }
 
-// GetIpAddressHandler retrieves an ip address entity from the database
-func (s *server) GetIpAddressHandler(w http.ResponseWriter, r *http.Request) {
-	logger.Info("GetIpAddressHandler started")
-
-	// Parse the ip address parameter from the request
-	params, err := parseIpAddressParams(r)
-	if err != nil {
-		logger.Warn("Invalid request parameters", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Attempt to retrieve the ip address entity and handle potential errors
-	entity, err := s.services.IpAddressService.GetIpAddress(params.Address)
-	if err != nil {
-		logger.Error("Error retrieving ip address entity",
-			zap.String("address", params.Address),
-			zap.Error(err))
-
-		// Determine the type of error and set the HTTP response accordingly
-		switch e := err.(type) {
-		case *services.ErrEntityNotFound:
-			http.Error(w, e.Error(), http.StatusNotFound)
-			return
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-
-	// Successfully retrieved entity; sending back to client
-	s.respond(w, entity, http.StatusOK)
-}
-
 // DeleteIpAddressHandler deletes an ip address entity from the bluecat
 func (s *server) DeleteIpAddressHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("DeleteIpAddressHandler started")

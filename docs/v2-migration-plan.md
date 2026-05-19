@@ -14,21 +14,23 @@ This is a **tactical** v1→v2 migration of a thin consumer, not a full BlueCat 
 
 ### Consumer audit (May 2026)
 
-Single production consumer: `server-api/lib/dns/proteus.rb` (Ruby). The full exercised surface across all Spinup microservices (`ui/`, `server-api/`, `server-api-go/`, `ec2-api/`, `ec2-api-go/`, plus all sibling `*-api` repos):
+Two production consumers across the Spinup + SpinupManaged ecosystems. The full exercised surface (`spinup/{ui,server-api,server-api-go,ec2-api,ec2-api-go,*-api}`, `spinupmanaged/{server-api,go_ui}`):
 
-| dns-api-go route | server-api caller | Response fields consumed |
+| dns-api-go route | Caller(s) | Response fields consumed |
 |---|---|---|
-| `POST /v2/dns/{acct}/records` | `create_host_record`, `create_alias_record`, `create_external_record` | passthrough (success/fail) |
-| `GET /v2/dns/{acct}/records?type=HostRecord&hint=^{fqdn}$` | `host_record_search`, `host_id`, `host_ip` | `[i].id`, `[i].properties['addresses']` (comma-split into IPs) |
-| `DELETE /v2/dns/{acct}/records/{id}` | `delete_host_record(release_ips=false)` | passthrough |
-| `POST /v2/dns/{acct}/ips` | `assign_ip` | `resp['ip']` |
-| `DELETE /v2/dns/{acct}/ips/{ip}` | `delete_ip` | passthrough |
+| `POST /v2/dns/{acct}/records` | `server-api` (`create_host_record`, `create_alias_record`, `create_external_record`); SpinupManaged DNS-create page | passthrough; SpinupManaged reads response `id` (record ID) |
+| `GET /v2/dns/{acct}/records?type=…&hint=…` | `server-api` (`host_record_search`, `host_id`, `host_ip`); SpinupManaged DNS-search page | `[i].id`, `[i].properties.addresses` (comma-split into IPs) |
+| `GET /v2/dns/{acct}/records/{id}` | SpinupManaged DNS-record detail page | whole entity passed to Blade view |
+| `DELETE /v2/dns/{acct}/records/{id}` | `server-api` (`delete_host_record(release_ips=false)`) | passthrough |
+| `POST /v2/dns/{acct}/ips` | `server-api` (`assign_ip`); SpinupManaged IP-create page | `server-api` reads `resp.ip`; SpinupManaged reads `resp.id` |
+| `DELETE /v2/dns/{acct}/ips/{ip}` | `server-api` (`delete_ip`) | passthrough |
+| `GET /v2/dns/{acct}/ips/cidrs` | SpinupManaged subnet-dropdown widget | JSON `{cidr: label}` map (served from local file, not BlueCat) |
 
-UI has `DNS_API_URL` / `DNS_API_TOKEN` in `docker/.env.deco` but no application code consumes them — they are dormant placeholders.
+Spinup `ui/` has `DNS_API_URL` / `DNS_API_TOKEN` in `docker/.env.deco` but no application code consumes them — dormant placeholders. `spinupmanaged/server-api` mirrors `spinup/server-api`'s 5-route surface; no additional routes.
 
 ### What's in scope
 
-Migrate these five routes to BlueCat v2 transport. Preserve the wire contract so `server-api` keeps working without changes.
+Migrate the BlueCat-backed routes to v2 transport. Preserve the wire contract so `server-api` and SpinupManaged keep working without changes. `GET /ips/cidrs` is in scope as a surviving route but **needs no v2 work** — its handler reads a local JSON file, never calls BlueCat.
 
 ### What's out of scope (delete, don't migrate)
 
@@ -39,8 +41,7 @@ Zero-caller dns-api-go handlers and their backing services:
 - `/macs`, `/macs/{mac}`, all MAC handlers, `MacAddressService` entirely (this also retires Phase 5E and the unvalidated `macPools` collection)
 - `/id/{id}` GET/DELETE, `GetEntityHandler`, `DeleteEntityHandler`
 - `/search`, `CustomSearchHandler`
-- `/ips/{ip}` GET, `GetIpAddressHandler` (the `GetIpAddress` *service method* stays as a private helper; the *public route* goes)
-- `/ips/cidrs`, `GetCIDRHandler`
+- `/ips/{ip}` GET, `GetIpAddressHandler` (the `GetIpAddress` *service method* stays as a private helper for `DeleteIpAddress`; the *public route* goes)
 - `/systeminfo`, `SystemInfoHandler` (Phase 2's transport smoke test; not consumed externally)
 
 ### Extensibility
@@ -118,11 +119,11 @@ Tests: `server_errors_test.go`, `helpers_test.go` (15 cases via `httptest`), `ha
 
 Deletes the v1-shaped surface area we're not migrating:
 
-- `internal/api/routes.go` — drop `/search`, `/id/{id}`, `/zones`, `/zones/{id}`, `/networks`, `/networks/{id}`, `/macs`, `/macs/{mac}`, `/ips/{ip}` GET, `/ips/cidrs`, `/systeminfo`. Final route table: `/ping`, `/version`, `/metrics`, `/`, `POST /records`, `GET /records`, `DELETE /records/{id}`, `POST /ips`, `DELETE /ips/{ip}`.
-- `internal/api/entity_handlers.go`, `zone_handlers.go`, `network_handlers.go`, `mac_address_handlers.go`, `search_handlers.go` (and tests) — delete.
+- `internal/api/routes.go` — drop `/search`, `/id/{id}`, `/zones`, `/zones/{id}`, `/networks`, `/networks/{id}`, `/macs`, `/macs/{mac}`, `/ips/{ip}` GET, `/systeminfo`. Final route table: `/ping`, `/version`, `/metrics`, `/`, `POST /records`, `GET /records`, `GET /records/{id}`, `DELETE /records/{id}`, `POST /ips`, `DELETE /ips/{ip}`, `GET /ips/cidrs`.
+- `internal/api/entity_handlers.go`, `zone_handlers.go`, `network_handlers.go`, `mac_address_handlers.go` (and tests) — delete. (No `search_handlers.go` exists; `CustomSearchHandler` lives in `entity_handlers.go`.)
 - `internal/api/handlers.go` — keep `Ping`, `Version`, `Home`; remove `SystemInfoHandler` (and its v1→v2-migrated body) plus tests.
 - `internal/services/zone_service.go`, `network_service.go`, `mac_address_service.go` — delete as public services. Their *private helpers* (FQDN→zone-id resolution for record creation, CIDR→parent-network-id for IP assignment) move into the service that needs them, scoped down.
-- `internal/api/ip_address_handlers.go` — remove `GetIpAddressHandler` and `GetCIDRHandler`; keep `AssignIpAddressHandler`, `DeleteIpAddressHandler`, `parentIdFromCidr` (this last one becomes a candidate for v2 simplification in Phase 5B).
+- `internal/api/ip_address_handlers.go` — remove `GetIpAddressHandler`; keep `AssignIpAddressHandler`, `DeleteIpAddressHandler`, `GetCIDRHandler` (local-file read for SpinupManaged), and `parentIdFromCidr` (the last one becomes a candidate for v2 simplification in Phase 5B).
 - Cross-package: any imports/types this exposes (e.g., `types.MACADDRESS`, mac-related helpers in `services/helpers.go`) get cleaned up alongside.
 
 **Verification**: `go build ./...` clean. `go test ./...` passes (existing tests for the deleted code go with it). Skip-guarded live tests still pass — they only exercise auth, sessions, and `SystemInfoHandler`, the last of which is replaced in Phase 6 with a record-search snapshot.

@@ -19,8 +19,6 @@ package api
 
 import (
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -184,37 +182,6 @@ func TestV2Live_401TriggersRotation(t *testing.T) {
 	}
 	if s.bluecat.sessionID == 0 {
 		t.Error("sessionID was zeroed after rotation but never refilled")
-	}
-}
-
-// SystemInfoHandler: drives the real handler against BAM-test and asserts
-// it returns a populated map containing the SystemSettings fields we expect
-// to see from any BlueCat instance (version, hostname, address).
-func TestV2Live_SystemInfoHandler(t *testing.T) {
-	s := newLiveServer(t)
-
-	req, _ := http.NewRequest("GET", "/v2/dns/systeminfo", nil)
-	rr := httptest.NewRecorder()
-	http.HandlerFunc(s.SystemInfoHandler).ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
-	}
-
-	var info map[string]string
-	if err := json.Unmarshal(rr.Body.Bytes(), &info); err != nil {
-		t.Fatalf("decode response: %v\nbody: %s", err, rr.Body.String())
-	}
-	for _, key := range []string{"hostname", "version", "address"} {
-		if info[key] == "" {
-			t.Errorf("info[%q] is empty; full response: %v", key, info)
-		}
-	}
-	if info["type"] != "SystemSettings" {
-		t.Errorf("type = %q, want SystemSettings", info["type"])
-	}
-	if _, ok := info["_links"]; ok {
-		t.Error("_links leaked into response")
 	}
 }
 

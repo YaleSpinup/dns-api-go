@@ -18,7 +18,6 @@ package api
 
 import (
 	"dns-api-go/internal/common"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -90,96 +89,3 @@ func TestVersionHandler(t *testing.T) {
 	}
 }
 
-func TestSystemInfoHandler_DecodesV2Settings(t *testing.T) {
-	var capturedQuery string
-	var capturedPath string
-
-	ts, s, _ := makeRequestRouter(t, func(w http.ResponseWriter, r *http.Request) {
-		capturedPath = r.URL.Path
-		capturedQuery = r.URL.RawQuery
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
-			"count": 1,
-			"data": [{
-				"id": 1,
-				"type": "SystemSettings",
-				"hostname": "BAM-3000",
-				"version": "25.1.1-1157.GA.bcn",
-				"address": "10.16.8.40",
-				"interfaceRedundancyEnabled": false,
-				"activeSessionCount": 3,
-				"_links": {"self": {"href": "/api/v2/settings/1"}}
-			}]
-		}`))
-	})
-	defer ts.Close()
-
-	req, _ := http.NewRequest("GET", "/v2/dns/systeminfo", nil)
-	rr := httptest.NewRecorder()
-	http.HandlerFunc(s.SystemInfoHandler).ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
-	}
-	if capturedPath != "/api/v2/settings" {
-		t.Errorf("path = %s, want /api/v2/settings", capturedPath)
-	}
-	if !strings.Contains(capturedQuery, "filter=type%3Aeq") {
-		t.Errorf("query = %s, want URL-encoded filter on type:eq", capturedQuery)
-	}
-	if !strings.Contains(capturedQuery, "SystemSettings") {
-		t.Errorf("query = %s, want filter value to mention SystemSettings", capturedQuery)
-	}
-
-	var info map[string]string
-	if err := json.Unmarshal(rr.Body.Bytes(), &info); err != nil {
-		t.Fatalf("decode response: %v\nbody: %s", err, rr.Body.String())
-	}
-	if info["hostname"] != "BAM-3000" {
-		t.Errorf("hostname = %q, want BAM-3000", info["hostname"])
-	}
-	if info["version"] != "25.1.1-1157.GA.bcn" {
-		t.Errorf("version = %q, want 25.1.1-1157.GA.bcn", info["version"])
-	}
-	if info["interfaceRedundancyEnabled"] != "false" {
-		t.Errorf("interfaceRedundancyEnabled = %q, want stringified bool 'false'", info["interfaceRedundancyEnabled"])
-	}
-	if info["activeSessionCount"] != "3" {
-		t.Errorf("activeSessionCount = %q, want stringified int '3'", info["activeSessionCount"])
-	}
-	if _, present := info["_links"]; present {
-		t.Error("_links should be dropped from response")
-	}
-}
-
-func TestSystemInfoHandler_EmptyDataIsError(t *testing.T) {
-	ts, s, _ := makeRequestRouter(t, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"count":0,"data":[]}`))
-	})
-	defer ts.Close()
-
-	req, _ := http.NewRequest("GET", "/v2/dns/systeminfo", nil)
-	rr := httptest.NewRecorder()
-	http.HandlerFunc(s.SystemInfoHandler).ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500 when SystemSettings entry missing", rr.Code)
-	}
-}
-
-func TestSystemInfoHandler_UpstreamErrorPropagates(t *testing.T) {
-	ts, s, _ := makeRequestRouter(t, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadGateway)
-		w.Write([]byte(`{"message":"upstream down"}`))
-	})
-	defer ts.Close()
-
-	req, _ := http.NewRequest("GET", "/v2/dns/systeminfo", nil)
-	rr := httptest.NewRecorder()
-	http.HandlerFunc(s.SystemInfoHandler).ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500 when upstream errors", rr.Code)
-	}
-}
