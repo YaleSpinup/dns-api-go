@@ -15,6 +15,7 @@ package services
 
 import (
 	"crypto/tls"
+	"dns-api-go/internal/common"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -31,12 +33,14 @@ type v2EnvSource struct {
 	BaseURL  string
 	Username string
 	Password string
+	ViewID   int
 }
 
 type v2Client struct {
 	baseURL   string
 	authBasic string
 	sessionID int
+	viewID    int
 	http      *http.Client
 	t         *testing.T
 }
@@ -68,6 +72,7 @@ func loadV2Env(t *testing.T) v2EnvSource {
 			BaseUrl  string `json:"baseUrl"`
 			Username string `json:"username"`
 			Password string `json:"password"`
+			ViewId   string `json:"viewId"`
 		} `json:"bluecat"`
 	}
 	if err := json.NewDecoder(f).Decode(&cfg); err != nil {
@@ -76,10 +81,12 @@ func loadV2Env(t *testing.T) v2EnvSource {
 	if cfg.Bluecat.BaseUrl == "" || cfg.Bluecat.Username == "" || cfg.Bluecat.Password == "" {
 		t.Skipf("bluecat creds incomplete in %s", cfgPath)
 	}
+	viewID, _ := strconv.Atoi(cfg.Bluecat.ViewId)
 	return v2EnvSource{
 		BaseURL:  cfg.Bluecat.BaseUrl,
 		Username: cfg.Bluecat.Username,
 		Password: cfg.Bluecat.Password,
+		ViewID:   viewID,
 	}
 }
 
@@ -89,6 +96,7 @@ func newV2Client(t *testing.T) *v2Client {
 
 	c := &v2Client{
 		baseURL: strings.TrimRight(env.BaseURL, "/"),
+		viewID:  env.ViewID,
 		http: &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
@@ -101,6 +109,52 @@ func newV2Client(t *testing.T) *v2Client {
 	t.Cleanup(c.logout)
 	return c
 }
+
+// MakeRequest lets v2Client double as a interfaces.ServerInterface so live
+// tests in this package can drive services (RecordService, IpAddressService)
+// against BAM-test without standing up the full *api.server. Non-2xx
+// statuses surface as *common.BluecatAPIError so callers' IsNotFound paths
+// behave identically to the production transport.
+func (c *v2Client) MakeRequest(method, route, queryParam string, body io.Reader) ([]byte, error) {
+	fullURL := c.baseURL + route
+	if queryParam != "" {
+		fullURL += "?" + queryParam
+	}
+
+	req, err := http.NewRequest(method, fullURL, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", c.authBasic)
+	req.Header.Set("Accept", "application/hal+json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusNoContent {
+		return []byte{}, nil
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, &common.BluecatAPIError{StatusCode: resp.StatusCode, Body: string(respBody)}
+	}
+	return respBody, nil
+}
+
+// GetCIDRFile satisfies interfaces.ServerInterface. The /ips/cidrs route
+// reads a local file in production and is not exercised by live tests.
+func (c *v2Client) GetCIDRFile() (string, error) { return "", nil }
+
+// ConfigurationID satisfies interfaces.ServerInterface. v2Client doesn't
+// cache a configuration ID; callers that need one (e.g. IpAddressService)
+// will hit the v2 fallback path in GetConfigID.
+func (c *v2Client) ConfigurationID() (int, bool) { return 0, false }
 
 func (c *v2Client) login(user, pass string) {
 	c.t.Helper()

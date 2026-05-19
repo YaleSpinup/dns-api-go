@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"dns-api-go/internal/common"
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
@@ -8,8 +9,9 @@ import (
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
-	"go.uber.org/zap"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 type RecordEntityService interface {
@@ -23,32 +25,61 @@ type RecordService struct {
 	server interfaces.ServerInterface
 }
 
-// NewRecordService Constructor for RecordService
+// recordTypes are the resource-record kinds dns-api-go exposes. The
+// EntityGetter/Deleter interfaces accept opaque IDs, so we still gate by
+// type so that callers cannot use record endpoints to mutate other v2
+// resources.
+var recordTypes = []string{types.HOSTRECORD, types.CNAMERECORD, types.EXTERNALHOST}
+
 func NewRecordService(server interfaces.ServerInterface) *RecordService {
 	return &RecordService{server: server}
 }
 
-func (rs *RecordService) GetEntity(recordId int, includeHA bool) (*models.Entity, error) {
+// GetEntity fetches a single resource record by ID via v2. includeHA is
+// accepted for backward compatibility with the EntityGetter interface but
+// has no v2 equivalent (v2 always returns the full entity).
+func (rs *RecordService) GetEntity(recordId int, _ bool) (*models.Entity, error) {
 	logger.Info("RecordService GetEntity started", zap.Int("recordId", recordId))
 
-	// Call EntityGetter
-	entity, err := GetEntityByID(rs.server, recordId, includeHA, []string{types.CNAMERECORD, types.HOSTRECORD, types.EXTERNALHOST})
+	resp, err := rs.server.MakeRequest("GET", fmt.Sprintf("/api/v2/resourceRecords/%d", recordId), "", nil)
 	if err != nil {
+		if common.IsNotFound(err) {
+			return nil, &ErrEntityNotFound{}
+		}
 		return nil, err
 	}
 
+	var rec models.V2HostRecord
+	if err := json.Unmarshal(resp, &rec); err != nil {
+		return nil, fmt.Errorf("decode resourceRecord %d: %w", recordId, err)
+	}
+
+	if !common.Contains(recordTypes, rec.Type) {
+		return nil, &ErrEntityTypeMismatch{ExpectedTypes: recordTypes, ActualType: rec.Type}
+	}
+
+	entity := rec.ToEntity()
 	logger.Info("GetEntity successful",
 		zap.Int("entityId", entity.ID),
 		zap.String("entityType", entity.Type))
-	return entity, nil
+	return &entity, nil
 }
 
+// DeleteEntity deletes a resource record by ID. The record type is checked
+// first to preserve the v1 type-allowlist (record handlers must not be a
+// path to delete arbitrary v2 resources).
 func (rs *RecordService) DeleteEntity(recordId int) error {
 	logger.Info("RecordService DeleteEntity started", zap.Int("recordId", recordId))
 
-	// Call EntityDeleter
-	err := DeleteEntityByID(rs.server, recordId, []string{types.CNAMERECORD, types.HOSTRECORD, types.EXTERNALHOST})
+	if _, err := rs.GetEntity(recordId, false); err != nil {
+		return err
+	}
+
+	_, err := rs.server.MakeRequest("DELETE", fmt.Sprintf("/api/v2/resourceRecords/%d", recordId), "", nil)
 	if err != nil {
+		if common.IsNotFound(err) {
+			return &ErrEntityNotFound{}
+		}
 		return err
 	}
 
@@ -56,10 +87,28 @@ func (rs *RecordService) DeleteEntity(recordId int) error {
 	return nil
 }
 
-func (rs *RecordService) GetRecordsByType(recordType string, parameters map[string]interface{}, viewId int) (*[]models.Entity, error) {
-	logger.Info("RecordService GetRecordByType started", zap.String("recordType", recordType))
+// GetRecordsByType searches resource records of one of the supported kinds.
+// The v2 implementation funnels every record kind through
+// /api/v2/resourceRecords?filter=… — there is no per-type collection
+// endpoint, and absoluteName covers the search surface that v1 split across
+// hint, name, and keyword variants.
+//
+// Parameters honored (all optional, sourced from the GET /records handler):
+//   - options.hint:   absoluteName contains
+//   - name:           absoluteName equals (exact match)
+//   - keyword:        absoluteName contains (treated as a hint synonym)
+//   - count, start:   limit/offset
+//
+// viewId is kept in the signature for backward compatibility but is not
+// applied as a v2 filter — v2 resourceRecords are globally addressable and
+// the view is implicit in the zone hierarchy.
+func (rs *RecordService) GetRecordsByType(recordType string, parameters map[string]interface{}, _ int) (*[]models.Entity, error) {
+	logger.Info("RecordService GetRecordsByType started", zap.String("recordType", recordType))
 
-	// Validate common parameters
+	if !common.Contains(recordTypes, recordType) {
+		return nil, fmt.Errorf("invalid record type %q", recordType)
+	}
+
 	count, ok := parameters["count"].(int)
 	if !ok {
 		return nil, fmt.Errorf("invalid type for count")
@@ -69,264 +118,386 @@ func (rs *RecordService) GetRecordsByType(recordType string, parameters map[stri
 		return nil, fmt.Errorf("invalid type for start")
 	}
 
-	var entities *[]models.Entity
-	var err error
-	switch recordType {
-	case types.HOSTRECORD, types.CNAMERECORD:
-		// Validate the parameters
-		options, ok := parameters["options"].(map[string]string)
-		if !ok {
-			return nil, fmt.Errorf("invalid type for options")
-		}
-
-		entities, err = rs.getHostOrAliasRecordsByHint(recordType, start, count, options)
-	case types.EXTERNALHOST:
-		// Validate the parameters
-		name, ok := parameters["name"].(string)
-		if !ok {
-			name = ""
-		}
-		keyword, ok := parameters["keyword"].(string)
-		if !ok {
-			keyword = ""
-		}
-
-		entities, err = rs.getExternalRecord(name, keyword, start, count, false, viewId)
-	default:
-		return nil, fmt.Errorf("invalid record type")
+	predicates := []string{fmt.Sprintf("type:eq('%s')", recordType)}
+	if p := extractAbsoluteNamePredicate(parameters); p != "" {
+		predicates = append(predicates, p)
 	}
 
-	// Check for error and return entities
-	if err != nil {
-		return nil, err
+	query := buildFilter(predicates...)
+	if count > 0 {
+		query += fmt.Sprintf("&limit=%d", count)
 	}
-	return entities, nil
-}
-
-func (rs *RecordService) getHostOrAliasRecordsByHint(recordType string, start int, count int, options map[string]string) (*[]models.Entity, error) {
-	// Define route and parameter map
-	var route string
-	switch recordType {
-	case types.HOSTRECORD:
-		route = "/getHostRecordsByHint"
-	case types.CNAMERECORD:
-		route = "/getAliasesByHint"
-	default:
-		return nil, fmt.Errorf("invalid record type")
-	}
-	paramsMap := map[string]string{
-		"count":   fmt.Sprintf("%d", count),
-		"start":   fmt.Sprintf("%d", start),
-		"options": common.ConvertToSeparatedString(options, "&"),
+	if start > 0 {
+		query += fmt.Sprintf("&offset=%d", start)
 	}
 
-	// Send request to bluecat
-	params := common.ConvertToSeparatedString(paramsMap, "&")
-	resp, err := rs.server.MakeRequest("GET", route, params, nil)
+	resp, err := rs.server.MakeRequest("GET", "/api/v2/resourceRecords", query, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal the response
-	var entitiesResp []models.BluecatEntity
-	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
-		logger.Error("Error unmarshalling entities response", zap.Error(err))
-		return nil, err
+	var col models.V2Collection[models.V2HostRecord]
+	if err := json.Unmarshal(resp, &col); err != nil {
+		return nil, fmt.Errorf("decode resourceRecord collection: %w", err)
 	}
 
-	// For each entity response, convert it to an entity
-	entities := models.ConvertToEntities(entitiesResp)
-
+	entities := make([]models.Entity, 0, len(col.Data))
+	for _, rec := range col.Data {
+		entities = append(entities, rec.ToEntity())
+	}
 	return &entities, nil
 }
 
-func (rs *RecordService) getExternalRecord(name string, keyword string, start int, count int, includeHA bool, viewId int) (*[]models.Entity, error) {
-	if name != "" {
-		// Cal GetEntityByName
-		entity, err := GetEntityByName(rs.server, name, types.EXTERNALHOST, viewId, includeHA)
-		if err != nil {
-			return nil, err
-		}
-		return &[]models.Entity{*entity}, nil
-	} else if keyword != "" {
-		// Call searchObjectsByTypes
-		entities, err := searchObjectByTypes(rs.server, keyword, start, count, includeHA, []string{types.EXTERNALHOST})
-		if err != nil {
-			return nil, err
-		}
-		return entities, nil
-	} else {
-		// Call GetEntities
-		entities, err := GetEntities(rs.server, start, count, viewId, types.EXTERNALHOST, includeHA)
-		if err != nil {
-			return nil, err
-		}
-		return entities, nil
+// extractAbsoluteNamePredicate maps the handler's name/hint/keyword params
+// to a single v2 filter predicate against absoluteName. Empty string means
+// no name-based predicate (the caller will still apply type:eq).
+func extractAbsoluteNamePredicate(parameters map[string]interface{}) string {
+	if name, _ := parameters["name"].(string); name != "" {
+		return fmt.Sprintf("absoluteName:eq('%s')", name)
 	}
+	if hint, _ := optionsHint(parameters); hint != "" {
+		return fmt.Sprintf("absoluteName:contains('%s')", hint)
+	}
+	if kw, _ := parameters["keyword"].(string); kw != "" {
+		return fmt.Sprintf("absoluteName:contains('%s')", kw)
+	}
+	return ""
 }
 
+func optionsHint(parameters map[string]interface{}) (string, bool) {
+	opts, ok := parameters["options"].(map[string]string)
+	if !ok {
+		return "", false
+	}
+	h := opts["hint"]
+	return h, h != ""
+}
+
+// CreateRecord creates a HostRecord, AliasRecord, or ExternalHostRecord via
+// v2. The wire contract with server-api is preserved end-to-end: callers
+// pass the FQDN as absoluteName / target name; this layer resolves the
+// zone, address IDs, and discriminated body shape.
 func (rs *RecordService) CreateRecord(recordType string, parameters map[string]interface{}, viewId int) (*models.Entity, error) {
 	logger.Info("Create Record started", zap.String("recordType", recordType))
 
-	// Check if record already exists in bluecat
-	checkRecordParams := map[string]interface{}{
-		"name":    parameters["name"],
-		"count":   10,
-		"start":   0,
-		"options": map[string]string{"hint": parameters["name"].(string)},
-	}
-	// Check if any entities are returned from the search. If there are, check if the first entity's name
-	// matches the name of the record being created.
-	entities, err := rs.GetRecordsByType(recordType, checkRecordParams, viewId)
-	logger.Info("Entities", zap.Any("entities", entities))
-	if err == nil && len(*entities) > 0 {
-		entity := (*entities)[0]
-		// For host/alias records, the absolute name must be retrieved from the properties field of the first entity
-		// and checked to see if it matches the "name" parameter that is passed in.
-		if recordType == types.HOSTRECORD || recordType == types.CNAMERECORD {
-			absoluteName, ok := entity.Properties["absoluteName"]
-			if ok && absoluteName == parameters["name"].(string) {
-				// Entity already exists, return custom error
-				logger.Error("Record already exists", zap.String("recordType", recordType))
-				return nil, &ErrEntityAlreadyExists{EntityID: entity.Name}
-			}
-		} else {
-			// For external records, the name parameter is the name of the record, so we can directly compare it with the entity name.
-			if entity.Name == parameters["name"].(string) {
-				// Entity already exists, return custom error
-				logger.Error("Record already exists", zap.String("recordType", recordType))
-				return nil, &ErrEntityAlreadyExists{EntityID: entity.Name}
-			}
-		}
+	if !common.Contains(recordTypes, recordType) {
+		return nil, fmt.Errorf("invalid record type %q", recordType)
 	}
 
-	var route string
-	var paramsMap map[string]string
+	// Preserve v1's pre-flight existence check so callers continue to see
+	// 409 Conflict instead of whatever shape BlueCat returns on duplicate.
+	if existing, found, err := rs.findByAbsoluteName(recordType, parameters); err == nil && found {
+		logger.Error("Record already exists", zap.String("recordType", recordType))
+		return nil, &ErrEntityAlreadyExists{EntityID: existing.Name}
+	}
 
-	// Set the route and properties map according to the record type
+	body, zoneID, err := rs.buildCreateBody(recordType, parameters, viewId)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := rs.server.MakeRequest(
+		"POST",
+		fmt.Sprintf("/api/v2/zones/%d/resourceRecords", zoneID),
+		"",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var rec models.V2HostRecord
+	if err := json.Unmarshal(resp, &rec); err != nil {
+		return nil, fmt.Errorf("decode create-record response: %w", err)
+	}
+
+	entity := rec.ToEntity()
+	return &entity, nil
+}
+
+// findByAbsoluteName runs a v2 search filtered by absoluteName + type and
+// returns the first match, or (_, false, nil) if no record matches.
+func (rs *RecordService) findByAbsoluteName(recordType string, parameters map[string]interface{}) (*models.Entity, bool, error) {
+	var fqdn string
+	if recordType == types.EXTERNALHOST {
+		fqdn, _ = parameters["name"].(string)
+	} else {
+		fqdn, _ = parameters["absoluteName"].(string)
+	}
+	if fqdn == "" {
+		return nil, false, nil
+	}
+
+	query := buildFilter(
+		fmt.Sprintf("type:eq('%s')", recordType),
+		fmt.Sprintf("absoluteName:eq('%s')", fqdn),
+	) + "&limit=1"
+
+	resp, err := rs.server.MakeRequest("GET", "/api/v2/resourceRecords", query, nil)
+	if err != nil {
+		return nil, false, err
+	}
+
+	var col models.V2Collection[models.V2HostRecord]
+	if err := json.Unmarshal(resp, &col); err != nil {
+		return nil, false, fmt.Errorf("decode pre-create lookup: %w", err)
+	}
+	if len(col.Data) == 0 {
+		return nil, false, nil
+	}
+	e := col.Data[0].ToEntity()
+	return &e, true, nil
+}
+
+// buildCreateBody returns the JSON body and resolved zone ID for the POST.
+// The body is discriminated by `type`; HostRecord additionally needs every
+// IP address resolved to its existing v2 Address resource ID.
+func (rs *RecordService) buildCreateBody(recordType string, parameters map[string]interface{}, viewId int) ([]byte, int, error) {
 	switch recordType {
 	case types.HOSTRECORD:
-		route, paramsMap, err = prepCreateHostParams(parameters, viewId)
-		if err != nil {
-			return nil, err
-		}
+		return rs.buildHostRecordBody(parameters, viewId)
 	case types.CNAMERECORD:
-		route, paramsMap, err = prepCreateCNAMEParams(parameters, viewId)
-		if err != nil {
-			return nil, err
-		}
+		return rs.buildAliasRecordBody(parameters, viewId)
 	case types.EXTERNALHOST:
-		route, paramsMap, err = prepCreateExternalParams(parameters, viewId)
-		if err != nil {
-			return nil, err
-		}
+		return rs.buildExternalHostRecordBody(parameters, viewId)
 	default:
-		return nil, fmt.Errorf("invalid record type")
+		return nil, 0, fmt.Errorf("invalid record type %q", recordType)
 	}
+}
 
-	// Send request to bluecat
-	params := common.ConvertToSeparatedString(paramsMap, "&")
-	resp, err := rs.server.MakeRequest("POST", route, params, nil)
+type v2AddressRef struct {
+	ID   int    `json:"id"`
+	Type string `json:"type"`
+}
+
+func (rs *RecordService) buildHostRecordBody(parameters map[string]interface{}, viewId int) ([]byte, int, error) {
+	absoluteName, _ := parameters["absoluteName"].(string)
+	if absoluteName == "" {
+		return nil, 0, fmt.Errorf("missing absoluteName for HostRecord")
+	}
+	ips, ok := parameters["addresses"].([]string)
+	if !ok || len(ips) == 0 {
+		return nil, 0, fmt.Errorf("missing addresses for HostRecord")
+	}
+	ttl, _ := parameters["ttl"].(int)
+
+	zoneID, localName, err := rs.splitFQDN(absoluteName, viewId)
 	if err != nil {
-		logger.Info("Error code", zap.Error(err))
-		return nil, err
+		return nil, 0, err
 	}
 
-	// Unmarshal the response to get the object iD
-	var recordId int
-	if err := json.Unmarshal(resp, &recordId); err != nil {
-		logger.Error("Error unmarshalling recordId", zap.Error(err))
-		return nil, err
-	}
-
-	// Get the new entity details
-	entity, err := rs.GetEntity(recordId, true)
+	addrRefs, err := rs.resolveAddressIDs(ips)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return entity, nil
+	body := map[string]interface{}{
+		"type":      types.HOSTRECORD,
+		"name":      localName,
+		"addresses": addrRefs,
+	}
+	if ttl > 0 {
+		body["ttl"] = ttl
+	}
+	if reverse, ok := reverseRecordFromProperties(parameters); ok {
+		body["reverseRecord"] = reverse
+	}
+
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("marshal HostRecord body: %w", err)
+	}
+	return encoded, zoneID, nil
 }
 
-func prepCreateHostParams(parameters map[string]interface{}, viewId int) (string, map[string]string, error) {
-	// Validate parameters
-	absoluteName, ok := parameters["absoluteName"].(string)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid type for absoluteName")
+func (rs *RecordService) buildAliasRecordBody(parameters map[string]interface{}, viewId int) ([]byte, int, error) {
+	absoluteName, _ := parameters["absoluteName"].(string)
+	if absoluteName == "" {
+		return nil, 0, fmt.Errorf("missing absoluteName for AliasRecord")
 	}
-	addresses, ok := parameters["addresses"].([]string)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid type for addresses")
+	target, _ := parameters["linkedRecordName"].(string)
+	if target == "" {
+		return nil, 0, fmt.Errorf("missing linkedRecordName for AliasRecord")
 	}
-	properties, ok := parameters["properties"].(map[string]string)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid type for properties")
-	}
-	ttl, ok := parameters["ttl"].(int)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid type for ttl")
+	ttl, _ := parameters["ttl"].(int)
+
+	zoneID, localName, err := rs.splitFQDN(absoluteName, viewId)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	// Define route and parameter map
-	route := "/addHostRecord"
-	paramsMap := map[string]string{
-		"absoluteName": absoluteName,
-		"addresses":    strings.Join(addresses, ","),
-		"properties":   common.ConvertToSeparatedString(properties, "|"),
-		"ttl":          fmt.Sprintf("%d", ttl),
-		"viewId":       fmt.Sprintf("%d", viewId),
+	body := map[string]interface{}{
+		"type": types.CNAMERECORD,
+		"name": localName,
+		"linkedRecord": map[string]string{
+			"absoluteName": target,
+		},
 	}
-	return route, paramsMap, nil
+	if ttl > 0 {
+		body["ttl"] = ttl
+	}
+
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("marshal AliasRecord body: %w", err)
+	}
+	return encoded, zoneID, nil
 }
 
-func prepCreateCNAMEParams(parameters map[string]interface{}, viewId int) (string, map[string]string, error) {
-	// Validate parameters
-	absoluteName, ok := parameters["absoluteName"].(string)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid type for absoluteName")
-	}
-	linkedRecordName, ok := parameters["linkedRecordName"].(string)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid type for linkedRecordName")
-	}
-	properties, ok := parameters["properties"].(map[string]string)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid type for properties")
-	}
-	ttl, ok := parameters["ttl"].(int)
-	if !ok {
-		return "", nil, fmt.Errorf("invalid type for ttl")
+func (rs *RecordService) buildExternalHostRecordBody(parameters map[string]interface{}, viewId int) ([]byte, int, error) {
+	name, _ := parameters["name"].(string)
+	if name == "" {
+		return nil, 0, fmt.Errorf("missing name for ExternalHostRecord")
 	}
 
-	// Define route and parameter map
-	route := "/addAliasRecord"
-	paramsMap := map[string]string{
-		"absoluteName":     absoluteName,
-		"linkedRecordName": linkedRecordName,
-		"properties":       common.ConvertToSeparatedString(properties, "|"),
-		"ttl":              fmt.Sprintf("%d", ttl),
-		"viewId":           fmt.Sprintf("%d", viewId),
+	zoneID, err := rs.resolveExternalHostsZone(viewId)
+	if err != nil {
+		return nil, 0, err
 	}
-	return route, paramsMap, nil
+
+	body := map[string]interface{}{
+		"type": types.EXTERNALHOST,
+		"name": name,
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("marshal ExternalHostRecord body: %w", err)
+	}
+	return encoded, zoneID, nil
 }
 
-func prepCreateExternalParams(parameters map[string]interface{}, viewId int) (string, map[string]string, error) {
-	// Validate parameters
-	name, ok := parameters["name"].(string)
+// reverseRecordFromProperties pulls the optional "reverseRecord" boolean
+// out of the v1-shaped properties map ("true"/"false" or "1"/"0").
+func reverseRecordFromProperties(parameters map[string]interface{}) (bool, bool) {
+	props, ok := parameters["properties"].(map[string]string)
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for name")
+		return false, false
 	}
-	properties, ok := parameters["properties"].(map[string]string)
+	v, ok := props["reverseRecord"]
 	if !ok {
-		return "", nil, fmt.Errorf("invalid type for properties")
+		return false, false
 	}
-
-	// Define route and parameter map
-	route := "/addExternalHostRecord"
-	paramsMap := map[string]string{
-		"name":       name,
-		"properties": common.ConvertToSeparatedString(properties, "|"),
-		"viewId":     fmt.Sprintf("%d", viewId),
+	switch strings.ToLower(v) {
+	case "true", "1", "yes":
+		return true, true
+	case "false", "0", "no":
+		return false, true
 	}
-	return route, paramsMap, nil
+	return false, false
 }
+
+// splitFQDN separates an absolute name into the local record label and the
+// zone ID it should live under. e.g. "host.spinuptest.internal" with view
+// 100902 returns (100913, "host", nil) where 100913 is the spinuptest zone.
+func (rs *RecordService) splitFQDN(absoluteName string, viewId int) (int, string, error) {
+	if absoluteName == "" {
+		return 0, "", fmt.Errorf("empty absoluteName")
+	}
+	parts := strings.Split(absoluteName, ".")
+	if len(parts) < 2 {
+		return 0, "", fmt.Errorf("absoluteName %q has no zone component", absoluteName)
+	}
+	zoneID, err := rs.resolveZoneIDFromLabels(parts[1:], viewId)
+	if err != nil {
+		return 0, "", err
+	}
+	return zoneID, parts[0], nil
+}
+
+// resolveZoneIDFromLabels walks BlueCat's zone tree right-to-left,
+// descending from the view into nested zones until every label is matched.
+// "spinuptest.internal" with view 100902 → first matches Zone(name='internal')
+// under views/100902/zones, then Zone(name='spinuptest') under zones/{id}/zones.
+//
+// type:eq('Zone') is always included to avoid the ExternalHostsZone collision
+// flagged in the Phase 1 findings.
+func (rs *RecordService) resolveZoneIDFromLabels(zoneLabels []string, viewId int) (int, error) {
+	if len(zoneLabels) == 0 {
+		return 0, fmt.Errorf("no zone labels to resolve")
+	}
+	collectionRoute := fmt.Sprintf("/api/v2/views/%d/zones", viewId)
+	var zoneID int
+	for i := len(zoneLabels) - 1; i >= 0; i-- {
+		label := zoneLabels[i]
+		query := buildFilter(
+			fmt.Sprintf("name:eq('%s')", label),
+			"type:eq('Zone')",
+		) + "&limit=1"
+		resp, err := rs.server.MakeRequest("GET", collectionRoute, query, nil)
+		if err != nil {
+			return 0, fmt.Errorf("looking up zone %q under %s: %w", label, collectionRoute, err)
+		}
+		var col models.V2Collection[struct {
+			ID int `json:"id"`
+		}]
+		if err := json.Unmarshal(resp, &col); err != nil {
+			return 0, fmt.Errorf("decode zone lookup for %q: %w", label, err)
+		}
+		if len(col.Data) == 0 {
+			return 0, fmt.Errorf("zone %q not found under %s", label, collectionRoute)
+		}
+		zoneID = col.Data[0].ID
+		collectionRoute = fmt.Sprintf("/api/v2/zones/%d/zones", zoneID)
+	}
+	return zoneID, nil
+}
+
+// resolveExternalHostsZone returns the single ExternalHostsZone under the
+// given view (Yale's views have exactly one).
+func (rs *RecordService) resolveExternalHostsZone(viewId int) (int, error) {
+	query := buildFilter("type:eq('ExternalHostsZone')") + "&limit=1"
+	resp, err := rs.server.MakeRequest("GET", fmt.Sprintf("/api/v2/views/%d/zones", viewId), query, nil)
+	if err != nil {
+		return 0, fmt.Errorf("looking up ExternalHostsZone for view %d: %w", viewId, err)
+	}
+	var col models.V2Collection[struct {
+		ID int `json:"id"`
+	}]
+	if err := json.Unmarshal(resp, &col); err != nil {
+		return 0, fmt.Errorf("decode ExternalHostsZone lookup: %w", err)
+	}
+	if len(col.Data) == 0 {
+		return 0, fmt.Errorf("no ExternalHostsZone found under view %d", viewId)
+	}
+	return col.Data[0].ID, nil
+}
+
+// resolveAddressIDs maps each IP string to an existing v2 Address resource
+// reference. The v2 HostRecord create only accepts addresses by ID; the
+// caller (server-api or SpinupManaged) is expected to have allocated the
+// IP separately (via POST /v2/dns/{acct}/ips) before creating the record.
+//
+// The Type returned by the lookup is echoed back verbatim so we never
+// guess the discriminator string ("IP4Address" vs "IPv4Address").
+func (rs *RecordService) resolveAddressIDs(ips []string) ([]v2AddressRef, error) {
+	refs := make([]v2AddressRef, 0, len(ips))
+	var missing []string
+	for _, ip := range ips {
+		ip = strings.TrimSpace(ip)
+		if ip == "" {
+			continue
+		}
+		query := buildFilter(fmt.Sprintf("address:eq('%s')", ip)) + "&limit=1"
+		resp, err := rs.server.MakeRequest("GET", "/api/v2/addresses", query, nil)
+		if err != nil {
+			return nil, fmt.Errorf("looking up address %s: %w", ip, err)
+		}
+		var col models.V2Collection[models.V2Address]
+		if err := json.Unmarshal(resp, &col); err != nil {
+			return nil, fmt.Errorf("decode address %s lookup: %w", ip, err)
+		}
+		if len(col.Data) == 0 {
+			missing = append(missing, ip)
+			continue
+		}
+		refs = append(refs, v2AddressRef{ID: col.Data[0].ID, Type: col.Data[0].Type})
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("addresses not allocated in BlueCat: %s", strings.Join(missing, ", "))
+	}
+	if len(refs) == 0 {
+		return nil, fmt.Errorf("no usable IP addresses supplied")
+	}
+	return refs, nil
+}
+
