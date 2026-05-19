@@ -6,10 +6,10 @@ import (
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
+	"net/http"
+
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
-	"net"
-	"net/http"
 )
 
 type IpAddressParams struct {
@@ -42,7 +42,7 @@ func parseIpAddressParams(r *http.Request) (*IpAddressParams, error) {
 }
 
 // parseAssignIpAddressParams parses and validates the parameters from the request.
-func parseAssignIpAddressBody(s *server, ipAddressService services.IpAddressEntityService, r *http.Request) (*AssignIpAddressParams, error) {
+func parseAssignIpAddressBody(ipAddressService services.IpAddressEntityService, r *http.Request) (*AssignIpAddressParams, error) {
 	var AssignIpAddressParams AssignIpAddressParams
 
 	// Extract the parameters from the request body
@@ -68,7 +68,7 @@ func parseAssignIpAddressBody(s *server, ipAddressService services.IpAddressEnti
 
 	// If there is no parent id provided, attempt to find it from the provided CIDR
 	if AssignIpAddressParams.ParentId == 0 {
-		cidrParentId, err := parentIdFromCidr(s, ipAddressService, AssignIpAddressParams.CIDR)
+		cidrParentId, err := ipAddressService.ParentIDFromCIDR(AssignIpAddressParams.CIDR)
 		if err != nil {
 			return nil, fmt.Errorf("you must either pass a valid network_id or a valid CIDR")
 		}
@@ -87,58 +87,6 @@ func parseAssignIpAddressBody(s *server, ipAddressService services.IpAddressEnti
 	}
 
 	return &AssignIpAddressParams, nil
-}
-
-// parentIdFromCidr returns the parent ID for the given CIDR range.
-func parentIdFromCidr(s *server, ipAddressService services.IpAddressEntityService, cidr string) (int, error) {
-	// Check if cidr is empty
-	if cidr == "" {
-		return -1, fmt.Errorf("CIDR cannot be empty")
-	}
-
-	_, ipNet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return -1, fmt.Errorf("invalid CIDR format: %v", err)
-	}
-
-	counter := 0
-	// Enumerate the first 10 IP addresses in the CIDR range
-	for ip := ipNet.IP.Mask(ipNet.Mask); ipNet.Contains(ip); incrementIP(ip) {
-		// Only try a max of 10 addresses
-		if counter >= 10 {
-			break
-		}
-
-		logger.Info("Trying to use IP address as canary", zap.String("ip", ip.String()))
-
-		// Get the IP address entity from the database
-		ipAddressEntity, err := ipAddressService.GetIpAddress(ip.String())
-		if err != nil {
-			counter++
-			continue
-		}
-
-		// Attempt to find parent ID of the IP address entity
-		parentID, err := services.GetParentID(s, ipAddressEntity.ID)
-		if err == nil {
-			return parentID, nil
-		}
-
-		counter++
-	}
-
-	// No parent ID found in the CIDR range
-	return 0, fmt.Errorf("no valid parent ID found in the CIDR range")
-}
-
-// incrementIP increments the given IP address by 1.
-func incrementIP(ip net.IP) {
-	for j := len(ip) - 1; j >= 0; j-- {
-		ip[j]++
-		if ip[j] > 0 {
-			break
-		}
-	}
 }
 
 // DeleteIpAddressHandler deletes an ip address entity from the bluecat
@@ -186,7 +134,7 @@ func (s *server) AssignIpAddressHandler(w http.ResponseWriter, r *http.Request) 
 	logger.Info("AssignIpAddressHandler started")
 
 	// Parse the body from the request
-	body, err := parseAssignIpAddressBody(s, s.services.IpAddressService, r)
+	body, err := parseAssignIpAddressBody(s.services.IpAddressService, r)
 	if err != nil {
 		logger.Warn("Invalid request body", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusBadRequest)

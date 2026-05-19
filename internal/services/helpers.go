@@ -1,10 +1,8 @@
 package services
 
 import (
-	"dns-api-go/internal/common"
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
-	"dns-api-go/internal/types"
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
@@ -56,110 +54,60 @@ func buildFilter(predicates ...string) string {
 	return "filter=" + url.QueryEscape(strings.Join(predicates, " and "))
 }
 
-// --- v1 helpers below — still wired into IpAddressService; Phase 5B retires them ---
-
-// GetParentID retrieves the parent ID of an entity from Bluecat (v1).
-func GetParentID(server interfaces.ServerInterface, entityId int) (int, error) {
-	logger.Info("GetParentID started", zap.Int("entityId", entityId))
-
-	route, params := "/getParent", fmt.Sprintf("entityId=%d", entityId)
-	resp, err := server.MakeRequest("GET", route, params, nil)
+// splitFQDN separates an absolute name into the local record label and the
+// zone ID it should live under. e.g. "host.spinuptest.internal" with view
+// 100902 returns (100913, "host", nil) where 100913 is the spinuptest zone.
+// Both RecordService.CreateRecord and IpAddressService.AssignIpAddress
+// need this on their create paths.
+func splitFQDN(server interfaces.ServerInterface, absoluteName string, viewId int) (int, string, error) {
+	if absoluteName == "" {
+		return 0, "", fmt.Errorf("empty absoluteName")
+	}
+	parts := strings.Split(absoluteName, ".")
+	if len(parts) < 2 {
+		return 0, "", fmt.Errorf("absoluteName %q has no zone component", absoluteName)
+	}
+	zoneID, err := resolveZoneIDFromLabels(server, parts[1:], viewId)
 	if err != nil {
-		logger.Error("Error getting parent ID", zap.Error(err), zap.Int("entityId", entityId))
-		return -1, err
+		return 0, "", err
 	}
-
-	var bluecatEntity models.BluecatEntity
-	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
-		logger.Error("Error unmarshalling entity response", zap.Error(err))
-		return -1, err
-	}
-
-	if bluecatEntity.IsEmpty() {
-		logger.Info("Entity not found", zap.Int("entity id", entityId))
-		return -1, &ErrEntityNotFound{}
-	}
-
-	parentEntity := bluecatEntity.ToEntity()
-
-	logger.Info("GetParentID successful", zap.Int("parentId", parentEntity.ID))
-	return parentEntity.ID, nil
+	return zoneID, parts[0], nil
 }
 
-// GetEntityByID retrieves an entity by ID from Bluecat (v1).
-func GetEntityByID(server interfaces.ServerInterface, id int, includeHA bool, expectedTypes []string) (*models.Entity, error) {
-	route, params := "/getEntityById", fmt.Sprintf("id=%d&includeHA=%t", id, includeHA)
-	resp, err := server.MakeRequest("GET", route, params, nil)
-	if err != nil {
-		logger.Error("Error getting entity by ID", zap.Error(err), zap.Int("id", id))
-		return nil, err
+// resolveZoneIDFromLabels walks BlueCat's zone tree right-to-left,
+// descending from the view into nested zones until every label is matched.
+// "spinuptest.internal" with view 100902 → first matches Zone(name='internal')
+// under views/100902/zones, then Zone(name='spinuptest') under zones/{id}/zones.
+//
+// type:eq('Zone') is always included to avoid the ExternalHostsZone collision
+// flagged in the Phase 1 findings.
+func resolveZoneIDFromLabels(server interfaces.ServerInterface, zoneLabels []string, viewId int) (int, error) {
+	if len(zoneLabels) == 0 {
+		return 0, fmt.Errorf("no zone labels to resolve")
 	}
-	logger.Info("Received response for GetEntityByID", zap.ByteString("response", resp))
-
-	var bluecatEntity models.BluecatEntity
-	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
-		logger.Error("Error unmarshalling entity response", zap.Error(err))
-		return nil, err
-	}
-	if bluecatEntity.IsEmpty() {
-		logger.Info("Entity not found", zap.Int("id", id))
-		return nil, &ErrEntityNotFound{}
-	}
-
-	entity := bluecatEntity.ToEntity()
-
-	if len(expectedTypes) > 0 && !common.Contains(expectedTypes, entity.Type) {
-		logger.Error("Entity type does not match expected types",
-			zap.String("entityType", entity.Type),
-			zap.Strings("expectedTypes", expectedTypes))
-		return nil, &ErrEntityTypeMismatch{expectedTypes, entity.Type}
-	}
-
-	logger.Info("GetEntityByID successful",
-		zap.Int("entityID", entity.ID),
-		zap.String("entityType", entity.Type))
-	return &entity, nil
-}
-
-// ALLOWDELETE — the v1 type allowlist for DeleteEntityByID. Phase 3 retired
-// MAC handlers; the MAC entries here are vestigial but harmless. Phase 5B
-// removes ALLOWDELETE entirely when DeleteEntityByID retires.
-var ALLOWDELETE = []string{
-	types.HOSTRECORD,
-	types.EXTERNALHOST,
-	types.CNAMERECORD,
-	types.IP4ADDRESS,
-}
-
-// DeleteEntityByID deletes an entity by ID from Bluecat (v1).
-func DeleteEntityByID(server interfaces.ServerInterface, id int, expectedTypes []string) error {
-	logger.Info("DeleteEntityByID started", zap.Int("id", id))
-
-	entity, err := GetEntityByID(server, id, false, expectedTypes)
-	if err != nil {
-		return err
-	}
-
-	isAllowedToDelete := false
-	for _, allowedType := range ALLOWDELETE {
-		if entity.Type == allowedType {
-			isAllowedToDelete = true
-			break
+	collectionRoute := fmt.Sprintf("/api/v2/views/%d/zones", viewId)
+	var zoneID int
+	for i := len(zoneLabels) - 1; i >= 0; i-- {
+		label := zoneLabels[i]
+		query := buildFilter(
+			fmt.Sprintf("name:eq('%s')", label),
+			"type:eq('Zone')",
+		) + "&limit=1"
+		resp, err := server.MakeRequest("GET", collectionRoute, query, nil)
+		if err != nil {
+			return 0, fmt.Errorf("looking up zone %q under %s: %w", label, collectionRoute, err)
 		}
+		var col models.V2Collection[struct {
+			ID int `json:"id"`
+		}]
+		if err := json.Unmarshal(resp, &col); err != nil {
+			return 0, fmt.Errorf("decode zone lookup for %q: %w", label, err)
+		}
+		if len(col.Data) == 0 {
+			return 0, fmt.Errorf("zone %q not found under %s", label, collectionRoute)
+		}
+		zoneID = col.Data[0].ID
+		collectionRoute = fmt.Sprintf("/api/v2/zones/%d/zones", zoneID)
 	}
-
-	if !isAllowedToDelete {
-		logger.Info("Entity deletion not allowed", zap.Int("id", id), zap.String("type", entity.Type))
-		return &ErrDeleteNotAllowed{Type: entity.Type}
-	}
-
-	route, params := "/delete", fmt.Sprintf("objectId=%d", id)
-	_, err = server.MakeRequest("DELETE", route, params, nil)
-	if err != nil {
-		logger.Error("Error deleting entity", zap.Error(err), zap.Int("id", id))
-		return err
-	}
-
-	logger.Info("DeleteEntityByID successful", zap.Int("id", id))
-	return nil
+	return zoneID, nil
 }
