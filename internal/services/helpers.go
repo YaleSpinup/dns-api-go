@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -60,41 +61,57 @@ func buildFilter(predicates ...string) string {
 // and must not go into `userDefinedFields` — the callers already pull
 // them out (or simply don't use them) before building the request body.
 var coreFieldKeys = map[string]struct{}{
-	"":                  {},
-	"type":              {},
-	"state":             {},
-	"address":           {},
-	"addresses":         {},
-	"name":              {},
-	"absoluteName":      {},
-	"macAddress":        {},
-	"reverseRecord":     {},
-	"linkedRecord":      {},
-	"linkedRecordName":  {},
-	"ttl":               {},
+	"":                 {},
+	"type":             {},
+	"state":            {},
+	"address":          {},
+	"addresses":        {},
+	"name":             {},
+	"absoluteName":     {},
+	"macAddress":       {},
+	"reverseRecord":    {},
+	"linkedRecord":     {},
+	"linkedRecordName": {},
+	"ttl":              {},
 }
 
-// defaultAddressUDFs returns the minimum user-defined field set required
-// when allocating a v2 IPv4Address against Yale's BAM, used as a fallback
-// when the caller supplied no UDFs of its own.
+// defaultAddressUDFs returns the user-defined field set Yale's BAM
+// requires when allocating a v2 IPv4Address, used as a fallback when the
+// caller supplied no UDFs of its own.
 //
-// server-api's `assign_ip` flow passes these explicitly (see
-// server-api/lib/actions/server/base.rb:899 — hardcoded `phone=xxx`).
-// Its `create_host_record` flow does NOT pass properties, so a v2
-// auto-allocation from CreateRecord would otherwise reach BAM with no
-// `userDefinedFields` and get rejected with
-// `'userDefinedFields.phone' is a required field`.
+// The set mirrors the literal that server-api hardcodes for its
+// `assign_ip` flow (see server-api/lib/actions/server/base.rb:899-900):
 //
-// Under v1, BAM silently auto-created Address resources during
-// addHostRecord and didn't validate UDFs; v2 splits the operation and
-// validates strictly, so dns-api-go has to fill the gap. `phone=xxx`
-// matches the literal that server-api uses elsewhere so the wire
-// contract stays consistent. If Yale's BAM ever requires additional
-// UDFs we'll see another `MissingRequiredField` error and add them
-// here — making this config-driven is the proper follow-up.
+//	machine_type=Virtual machine
+//	description=Auto-provisioned by Spinup ServerAPI
+//	phone=xxx
+//	location=Cloud
+//	reg_by=SpinupManaged
+//	reg_date=<UTC YYYY-MM-DD HH:MM:SS>
+//	user_name=<requesting user>
+//
+// server-api's `create_host_record` flow doesn't pass properties at all,
+// so a v2 auto-allocation from CreateRecord would otherwise reach BAM
+// with no `userDefinedFields` and get rejected one required field at a
+// time. Under v1 BAM silently auto-created Addresses during
+// addHostRecord without validating UDFs; v2 splits the operation and
+// validates strictly, so dns-api-go fills the gap here.
+//
+// `reg_date` is computed at call time using the same format
+// (`%Y-%m-%d %H:%M:%S` UTC) as server-api's `time_proteus` helper.
+// `user_name` falls back to a service identifier — dns-api-go has no
+// upstream user context on the create_host_record path. Making this
+// config-driven (so the value set can shift without a code change) is
+// the proper follow-up.
 func defaultAddressUDFs() map[string]interface{} {
 	return map[string]interface{}{
-		"phone": "xxx",
+		"machine_type": "Virtual machine",
+		"description":  "Auto-provisioned by Spinup ServerAPI",
+		"phone":        "xxx",
+		"location":     "Cloud",
+		"reg_by":       "Spinup",
+		"reg_date":     time.Now().UTC().Format("2006-01-02 15:04:05"),
+		"user_name":    "spinup-dns-api",
 	}
 }
 

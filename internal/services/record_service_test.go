@@ -520,8 +520,25 @@ func TestRecordService_CreateRecord_Host_FallsBackToDefaultUDFsForAllocation(t *
 	if err != nil {
 		t.Fatalf("CreateRecord: %v", err)
 	}
-	if addrUDFsSeen["phone"] != "xxx" {
-		t.Errorf("address POST userDefinedFields = %v, want fallback {phone: xxx}", addrUDFsSeen)
+
+	// All seven UDFs from server-api/lib/actions/server/base.rb:899-900 must
+	// land in the Address POST. reg_date is dynamic (current UTC time); the
+	// other six are static literals.
+	expected := map[string]string{
+		"machine_type": "Virtual machine",
+		"description":  "Auto-provisioned by Spinup ServerAPI",
+		"phone":        "xxx",
+		"location":     "Cloud",
+		"reg_by":       "Spinup",
+		"user_name":    "spinup-dns-api",
+	}
+	for k, want := range expected {
+		if got, _ := addrUDFsSeen[k].(string); got != want {
+			t.Errorf("address UDF %q = %q, want %q (full set: %v)", k, got, want, addrUDFsSeen)
+		}
+	}
+	if regDate, _ := addrUDFsSeen["reg_date"].(string); regDate == "" {
+		t.Errorf("address UDF reg_date is empty, want a timestamp; full UDFs = %v", addrUDFsSeen)
 	}
 }
 
