@@ -398,10 +398,12 @@ func TestRecordService_DeleteEntity_RejectsNonRecordType(t *testing.T) {
 	}
 }
 
-// resolveAddressIDs surfaces an explicit error listing the missing IPs so
-// callers (and operators reading logs) can see exactly what was not found
-// in BlueCat. The HostRecord create path depends on this for legibility.
-func TestRecordService_HostCreate_MissingAddressFails(t *testing.T) {
+// HostCreate auto-allocates a v2 Address when BAM doesn't yet know the IP
+// (preserves the v1 addHostRecord behavior server-api depends on). The
+// flow: filter by address:eq → empty, range:contains → find network,
+// POST /networks/{netId}/addresses → use returned ID in HostRecord body.
+func TestRecordService_CreateRecord_Host_AutoAllocatesMissingAddress(t *testing.T) {
+	allocatePosted := false
 	ss := newScriptedServer(nil)
 	ss.mock.MakeRequestFunc = func(method, route, queryParam string, body io.Reader) ([]byte, error) {
 		switch {
@@ -413,6 +415,80 @@ func TestRecordService_HostCreate_MissingAddressFails(t *testing.T) {
 			return []byte(`{"count":1,"data":[{"id":100913}]}`), nil
 		case method == "GET" && route == "/api/v2/addresses":
 			return []byte(`{"count":0,"data":[]}`), nil
+		case method == "GET" && route == "/api/v2/networks":
+			if !strings.Contains(queryParam, "range%3Acontains") {
+				t.Errorf("network lookup query missing range:contains predicate: %s", queryParam)
+			}
+			return []byte(`{"count":1,"data":[{"id":200001}]}`), nil
+		case method == "POST" && route == "/api/v2/networks/200001/addresses":
+			allocatePosted = true
+			b, _ := io.ReadAll(body)
+			var got map[string]interface{}
+			_ = json.Unmarshal(b, &got)
+			if got["address"] != "10.5.99.99" {
+				t.Errorf("allocate body address = %v, want 10.5.99.99 (explicit, not next-available)", got["address"])
+			}
+			if got["state"] != "STATIC" {
+				t.Errorf("allocate body state = %v, want STATIC", got["state"])
+			}
+			return []byte(`{"id":3000123,"type":"IPv4Address","address":"10.5.99.99","state":"STATIC"}`), nil
+		case method == "POST" && route == "/api/v2/zones/100913/resourceRecords":
+			b, _ := io.ReadAll(body)
+			var got map[string]interface{}
+			_ = json.Unmarshal(b, &got)
+			addrs := got["addresses"].([]interface{})
+			ref := addrs[0].(map[string]interface{})
+			if int(ref["id"].(float64)) != 3000123 {
+				t.Errorf("host record addresses[0].id = %v, want 3000123 (the newly-allocated address)", ref["id"])
+			}
+			return []byte(`{"id":3000200,"type":"HostRecord","name":"example","absoluteName":"example.spinuptest.internal"}`), nil
+		}
+		return nil, errorf("unexpected %s %s", method, route)
+	}
+
+	rs := NewRecordService(ss.mock)
+	entity, err := rs.CreateRecord(types.HOSTRECORD, map[string]interface{}{
+		"absoluteName": "example.spinuptest.internal",
+		"addresses":    []string{"10.5.99.99"},
+	}, 100902)
+	if err != nil {
+		t.Fatalf("CreateRecord: %v", err)
+	}
+	if entity.ID != 3000200 {
+		t.Errorf("entity ID = %d, want 3000200", entity.ID)
+	}
+	if !allocatePosted {
+		t.Error("expected POST /networks/{id}/addresses to allocate the missing IP, but it was never called")
+	}
+}
+
+// When the IP isn't in BAM AND no network contains it, the operation
+// fails — but any previously-allocated Address in the same flow must be
+// rolled back so retries see a clean slate.
+func TestRecordService_CreateRecord_Host_NoContainingNetworkRollsBack(t *testing.T) {
+	deletedFirstAlloc := false
+	ss := newScriptedServer(nil)
+	ss.mock.MakeRequestFunc = func(method, route, queryParam string, body io.Reader) ([]byte, error) {
+		switch {
+		case method == "GET" && route == "/api/v2/resourceRecords":
+			return []byte(`{"count":0,"data":[]}`), nil
+		case method == "GET" && route == "/api/v2/views/100902/zones":
+			return []byte(`{"count":1,"data":[{"id":100911}]}`), nil
+		case method == "GET" && route == "/api/v2/zones/100911/zones":
+			return []byte(`{"count":1,"data":[{"id":100913}]}`), nil
+		case method == "GET" && route == "/api/v2/addresses":
+			return []byte(`{"count":0,"data":[]}`), nil
+		case method == "GET" && route == "/api/v2/networks":
+			// First IP finds a network; second IP doesn't.
+			if strings.Contains(queryParam, "10.5.0.10") {
+				return []byte(`{"count":1,"data":[{"id":200001}]}`), nil
+			}
+			return []byte(`{"count":0,"data":[]}`), nil
+		case method == "POST" && route == "/api/v2/networks/200001/addresses":
+			return []byte(`{"id":3000123,"type":"IPv4Address","address":"10.5.0.10","state":"STATIC"}`), nil
+		case method == "DELETE" && route == "/api/v2/addresses/3000123":
+			deletedFirstAlloc = true
+			return []byte{}, nil
 		}
 		return nil, errorf("unexpected %s %s", method, route)
 	}
@@ -420,9 +496,53 @@ func TestRecordService_HostCreate_MissingAddressFails(t *testing.T) {
 	rs := NewRecordService(ss.mock)
 	_, err := rs.CreateRecord(types.HOSTRECORD, map[string]interface{}{
 		"absoluteName": "example.spinuptest.internal",
-		"addresses":    []string{"10.5.99.99"},
+		"addresses":    []string{"10.5.0.10", "10.99.99.99"},
 	}, 100902)
-	if err == nil || !strings.Contains(err.Error(), "10.5.99.99") {
-		t.Errorf("err = %v, want error mentioning 10.5.99.99", err)
+	if err == nil {
+		t.Fatal("expected error when second IP has no containing network, got nil")
+	}
+	if !deletedFirstAlloc {
+		t.Error("first IP's freshly-allocated Address was not rolled back after the second IP failed")
+	}
+}
+
+// If the HostRecord POST itself fails after Addresses are allocated,
+// the rollback path must still trip so we don't leave orphaned Addresses.
+func TestRecordService_CreateRecord_Host_RecordPostFailureRollsBack(t *testing.T) {
+	deleted := false
+	ss := newScriptedServer(nil)
+	ss.mock.MakeRequestFunc = func(method, route, queryParam string, body io.Reader) ([]byte, error) {
+		switch {
+		case method == "GET" && route == "/api/v2/resourceRecords":
+			return []byte(`{"count":0,"data":[]}`), nil
+		case method == "GET" && route == "/api/v2/views/100902/zones":
+			return []byte(`{"count":1,"data":[{"id":100911}]}`), nil
+		case method == "GET" && route == "/api/v2/zones/100911/zones":
+			return []byte(`{"count":1,"data":[{"id":100913}]}`), nil
+		case method == "GET" && route == "/api/v2/addresses":
+			return []byte(`{"count":0,"data":[]}`), nil
+		case method == "GET" && route == "/api/v2/networks":
+			return []byte(`{"count":1,"data":[{"id":200001}]}`), nil
+		case method == "POST" && route == "/api/v2/networks/200001/addresses":
+			return []byte(`{"id":3000123,"type":"IPv4Address","address":"10.5.0.10","state":"STATIC"}`), nil
+		case method == "POST" && route == "/api/v2/zones/100913/resourceRecords":
+			return nil, errorf("simulated BAM 500 on record create")
+		case method == "DELETE" && route == "/api/v2/addresses/3000123":
+			deleted = true
+			return []byte{}, nil
+		}
+		return nil, errorf("unexpected %s %s", method, route)
+	}
+
+	rs := NewRecordService(ss.mock)
+	_, err := rs.CreateRecord(types.HOSTRECORD, map[string]interface{}{
+		"absoluteName": "example.spinuptest.internal",
+		"addresses":    []string{"10.5.0.10"},
+	}, 100902)
+	if err == nil {
+		t.Fatal("expected error from simulated record-create failure")
+	}
+	if !deleted {
+		t.Error("newly-allocated Address was not rolled back after record-create failure")
 	}
 }

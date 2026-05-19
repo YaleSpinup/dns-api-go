@@ -176,7 +176,10 @@ func optionsHint(parameters map[string]interface{}) (string, bool) {
 // CreateRecord creates a HostRecord, AliasRecord, or ExternalHostRecord via
 // v2. The wire contract with server-api is preserved end-to-end: callers
 // pass the FQDN as absoluteName / target name; this layer resolves the
-// zone, address IDs, and discriminated body shape.
+// zone, address IDs (auto-allocating missing v2 Address resources when
+// server-api passes a target IP that BAM hasn't seen yet — v1
+// `addHostRecord` did this implicitly, v2 requires the explicit POST), and
+// the discriminated body shape.
 func (rs *RecordService) CreateRecord(recordType string, parameters map[string]interface{}, viewId int) (*models.Entity, error) {
 	logger.Info("Create Record started", zap.String("recordType", recordType))
 
@@ -191,8 +194,12 @@ func (rs *RecordService) CreateRecord(recordType string, parameters map[string]i
 		return nil, &ErrEntityAlreadyExists{EntityID: existing.Name}
 	}
 
-	body, zoneID, err := rs.buildCreateBody(recordType, parameters, viewId)
+	body, zoneID, allocated, err := rs.buildCreateBody(recordType, parameters, viewId)
 	if err != nil {
+		// Allocation may have partially succeeded before the failure (e.g.
+		// 2 of 3 IPs allocated, 3rd network lookup failed). Roll back what
+		// we have so retries see a clean slate.
+		rs.rollbackAddresses(allocated)
 		return nil, err
 	}
 
@@ -203,16 +210,31 @@ func (rs *RecordService) CreateRecord(recordType string, parameters map[string]i
 		bytes.NewReader(body),
 	)
 	if err != nil {
+		rs.rollbackAddresses(allocated)
 		return nil, err
 	}
 
 	var rec models.V2HostRecord
 	if err := json.Unmarshal(resp, &rec); err != nil {
+		rs.rollbackAddresses(allocated)
 		return nil, fmt.Errorf("decode create-record response: %w", err)
 	}
 
 	entity := rec.ToEntity()
 	return &entity, nil
+}
+
+// rollbackAddresses DELETEs each v2 Address by ID. Best-effort: failures are
+// logged but don't surface, since the parent operation is already failing
+// and we want to drop as much partial state as possible.
+func (rs *RecordService) rollbackAddresses(ids []int) {
+	for _, id := range ids {
+		if _, err := rs.server.MakeRequest("DELETE", fmt.Sprintf("/api/v2/addresses/%d", id), "", nil); err != nil {
+			logger.Error("rollback of newly-allocated address failed",
+				zap.Int("addressId", id),
+				zap.Error(err))
+		}
+	}
 }
 
 // findByAbsoluteName runs a v2 search filtered by absoluteName + type and
@@ -249,19 +271,22 @@ func (rs *RecordService) findByAbsoluteName(recordType string, parameters map[st
 	return &e, true, nil
 }
 
-// buildCreateBody returns the JSON body and resolved zone ID for the POST.
-// The body is discriminated by `type`; HostRecord additionally needs every
-// IP address resolved to its existing v2 Address resource ID.
-func (rs *RecordService) buildCreateBody(recordType string, parameters map[string]interface{}, viewId int) ([]byte, int, error) {
+// buildCreateBody returns the JSON body, resolved zone ID, and the list of
+// v2 Address IDs that were freshly allocated as part of preparing the body
+// (HostRecord only — Alias and ExternalHost return nil). The caller must
+// roll those IDs back if the subsequent POST fails.
+func (rs *RecordService) buildCreateBody(recordType string, parameters map[string]interface{}, viewId int) ([]byte, int, []int, error) {
 	switch recordType {
 	case types.HOSTRECORD:
 		return rs.buildHostRecordBody(parameters, viewId)
 	case types.CNAMERECORD:
-		return rs.buildAliasRecordBody(parameters, viewId)
+		body, zoneID, err := rs.buildAliasRecordBody(parameters, viewId)
+		return body, zoneID, nil, err
 	case types.EXTERNALHOST:
-		return rs.buildExternalHostRecordBody(parameters, viewId)
+		body, zoneID, err := rs.buildExternalHostRecordBody(parameters, viewId)
+		return body, zoneID, nil, err
 	default:
-		return nil, 0, fmt.Errorf("invalid record type %q", recordType)
+		return nil, 0, nil, fmt.Errorf("invalid record type %q", recordType)
 	}
 }
 
@@ -270,25 +295,27 @@ type v2AddressRef struct {
 	Type string `json:"type"`
 }
 
-func (rs *RecordService) buildHostRecordBody(parameters map[string]interface{}, viewId int) ([]byte, int, error) {
+func (rs *RecordService) buildHostRecordBody(parameters map[string]interface{}, viewId int) ([]byte, int, []int, error) {
 	absoluteName, _ := parameters["absoluteName"].(string)
 	if absoluteName == "" {
-		return nil, 0, fmt.Errorf("missing absoluteName for HostRecord")
+		return nil, 0, nil, fmt.Errorf("missing absoluteName for HostRecord")
 	}
 	ips, ok := parameters["addresses"].([]string)
 	if !ok || len(ips) == 0 {
-		return nil, 0, fmt.Errorf("missing addresses for HostRecord")
+		return nil, 0, nil, fmt.Errorf("missing addresses for HostRecord")
 	}
 	ttl, _ := parameters["ttl"].(int)
 
 	zoneID, localName, err := splitFQDN(rs.server, absoluteName, viewId)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 
-	addrRefs, err := rs.resolveAddressIDs(ips)
+	addrRefs, allocated, err := rs.resolveOrAllocateAddresses(ips)
 	if err != nil {
-		return nil, 0, err
+		// Partial allocations get rolled back by the caller via the
+		// returned slice — even on the error path.
+		return nil, 0, allocated, err
 	}
 
 	body := map[string]interface{}{
@@ -305,9 +332,9 @@ func (rs *RecordService) buildHostRecordBody(parameters map[string]interface{}, 
 
 	encoded, err := json.Marshal(body)
 	if err != nil {
-		return nil, 0, fmt.Errorf("marshal HostRecord body: %w", err)
+		return nil, 0, allocated, fmt.Errorf("marshal HostRecord body: %w", err)
 	}
-	return encoded, zoneID, nil
+	return encoded, zoneID, allocated, nil
 }
 
 func (rs *RecordService) buildAliasRecordBody(parameters map[string]interface{}, viewId int) ([]byte, int, error) {
@@ -406,42 +433,123 @@ func (rs *RecordService) resolveExternalHostsZone(viewId int) (int, error) {
 	return col.Data[0].ID, nil
 }
 
-// resolveAddressIDs maps each IP string to an existing v2 Address resource
-// reference. The v2 HostRecord create only accepts addresses by ID; the
-// caller (server-api or SpinupManaged) is expected to have allocated the
-// IP separately (via POST /v2/dns/{acct}/ips) before creating the record.
+// resolveOrAllocateAddresses maps each IP string to a v2 Address resource
+// reference, allocating one when BAM doesn't yet have the IP as an
+// Address. v2 HostRecord create only accepts addresses by {id, type}; v1's
+// addHostRecord auto-created Addresses for any IPs in `target` that didn't
+// exist, and server-api's create_host_record flow still depends on that
+// behavior (no separate POST /ips beforehand).
 //
-// The Type returned by the lookup is echoed back verbatim so we never
-// guess the discriminator string ("IP4Address" vs "IPv4Address").
-func (rs *RecordService) resolveAddressIDs(ips []string) ([]v2AddressRef, error) {
+// Returns the refs and the list of Address IDs that were freshly allocated
+// (vs. found pre-existing). The caller rolls those back if the subsequent
+// HostRecord POST fails. Returning the allocated list even on the error
+// path is intentional — if the 3rd of 4 IPs fails to allocate, the first 2
+// allocations need to be undone.
+func (rs *RecordService) resolveOrAllocateAddresses(ips []string) ([]v2AddressRef, []int, error) {
 	refs := make([]v2AddressRef, 0, len(ips))
-	var missing []string
+	var allocated []int
 	for _, ip := range ips {
 		ip = strings.TrimSpace(ip)
 		if ip == "" {
 			continue
 		}
-		query := buildFilter(fmt.Sprintf("address:eq('%s')", ip)) + "&limit=1"
-		resp, err := rs.server.MakeRequest("GET", "/api/v2/addresses", query, nil)
+
+		existing, found, err := rs.findAddressByIP(ip)
 		if err != nil {
-			return nil, fmt.Errorf("looking up address %s: %w", ip, err)
+			return refs, allocated, err
 		}
-		var col models.V2Collection[models.V2Address]
-		if err := json.Unmarshal(resp, &col); err != nil {
-			return nil, fmt.Errorf("decode address %s lookup: %w", ip, err)
-		}
-		if len(col.Data) == 0 {
-			missing = append(missing, ip)
+		if found {
+			refs = append(refs, v2AddressRef{ID: existing.ID, Type: existing.Type})
 			continue
 		}
-		refs = append(refs, v2AddressRef{ID: col.Data[0].ID, Type: col.Data[0].Type})
-	}
-	if len(missing) > 0 {
-		return nil, fmt.Errorf("addresses not allocated in BlueCat: %s", strings.Join(missing, ", "))
+
+		netID, err := rs.networkIDContainingIP(ip)
+		if err != nil {
+			return refs, allocated, fmt.Errorf("locating network for %s: %w", ip, err)
+		}
+
+		created, err := rs.allocateAddressInNetwork(netID, ip)
+		if err != nil {
+			return refs, allocated, fmt.Errorf("allocating address %s: %w", ip, err)
+		}
+		refs = append(refs, v2AddressRef{ID: created.ID, Type: created.Type})
+		allocated = append(allocated, created.ID)
 	}
 	if len(refs) == 0 {
-		return nil, fmt.Errorf("no usable IP addresses supplied")
+		return nil, allocated, fmt.Errorf("no usable IP addresses supplied")
 	}
-	return refs, nil
+	return refs, allocated, nil
+}
+
+// findAddressByIP looks up a v2 Address by its IP string. Returns
+// (_, false, nil) when the IP isn't in BAM yet.
+func (rs *RecordService) findAddressByIP(ip string) (*models.V2Address, bool, error) {
+	query := buildFilter(fmt.Sprintf("address:eq('%s')", ip)) + "&limit=1"
+	resp, err := rs.server.MakeRequest("GET", "/api/v2/addresses", query, nil)
+	if err != nil {
+		return nil, false, fmt.Errorf("looking up address %s: %w", ip, err)
+	}
+	var col models.V2Collection[models.V2Address]
+	if err := json.Unmarshal(resp, &col); err != nil {
+		return nil, false, fmt.Errorf("decode address %s lookup: %w", ip, err)
+	}
+	if len(col.Data) == 0 {
+		return nil, false, nil
+	}
+	return &col.Data[0], true, nil
+}
+
+// networkIDContainingIP returns the ID of the v2 IPv4Network whose `range`
+// CIDR contains the given IP. Uses BAM's `range:contains('<ip>')` filter —
+// validated live against BAM-test; the variant `range:contains('<ip>/32')`
+// returns 400 InvalidFilterAddress, so the IP must be bare.
+func (rs *RecordService) networkIDContainingIP(ip string) (int, error) {
+	query := buildFilter(fmt.Sprintf("range:contains('%s')", ip)) + "&limit=1"
+	resp, err := rs.server.MakeRequest("GET", "/api/v2/networks", query, nil)
+	if err != nil {
+		return 0, fmt.Errorf("network lookup by IP %s: %w", ip, err)
+	}
+	var col models.V2Collection[struct {
+		ID int `json:"id"`
+	}]
+	if err := json.Unmarshal(resp, &col); err != nil {
+		return 0, fmt.Errorf("decode network lookup for %s: %w", ip, err)
+	}
+	if len(col.Data) == 0 {
+		return 0, fmt.Errorf("no network contains %s", ip)
+	}
+	return col.Data[0].ID, nil
+}
+
+// allocateAddressInNetwork POSTs a state=STATIC IPv4Address with an
+// explicit `address` field — telling BAM to reserve that specific IP
+// (vs. the "next available" semantic used by IpAddressService).
+func (rs *RecordService) allocateAddressInNetwork(netID int, ip string) (*models.V2Address, error) {
+	body := map[string]interface{}{
+		"type":    "IPv4Address",
+		"state":   "STATIC",
+		"address": ip,
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal allocate body: %w", err)
+	}
+	resp, err := rs.server.MakeRequest(
+		"POST",
+		fmt.Sprintf("/api/v2/networks/%d/addresses", netID),
+		"",
+		bytes.NewReader(encoded),
+	)
+	if err != nil {
+		return nil, err
+	}
+	var addr models.V2Address
+	if err := json.Unmarshal(resp, &addr); err != nil {
+		return nil, fmt.Errorf("decode allocate response: %w", err)
+	}
+	if addr.ID == 0 || addr.Address == "" {
+		return nil, fmt.Errorf("allocate returned bad address: %s", string(resp))
+	}
+	return &addr, nil
 }
 
