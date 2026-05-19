@@ -29,6 +29,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -54,14 +55,15 @@ type proxyBackend struct {
 }
 
 type bluecat struct {
-	account   string
-	baseUrl   string
-	user      string
-	password  string
-	token     string
-	sessionID int
-	tokenLock sync.Mutex
-	viewId    string
+	account         string
+	baseUrl         string
+	user            string
+	password        string
+	token           string
+	sessionID       int
+	tokenLock       sync.Mutex
+	viewId          string
+	configurationId int
 }
 
 type Services struct {
@@ -110,6 +112,16 @@ func NewServer(config common.Config) error {
 			user:     b.Username,
 			password: b.Password,
 			viewId:   b.ViewId,
+		}
+		if b.ConfigurationId != "" {
+			id, err := strconv.Atoi(b.ConfigurationId)
+			if err != nil {
+				logger.Warn("ignoring non-integer bluecat.configurationId; will resolve via v2 API",
+					zap.String("configurationId", b.ConfigurationId),
+					zap.Error(err))
+			} else {
+				s.bluecat.configurationId = id
+			}
 		}
 	}
 
@@ -238,6 +250,16 @@ func retry(attempts int, doubling int, sleep time.Duration, f func() error) erro
 	}
 
 	return nil
+}
+
+// ConfigurationID returns the BlueCat configuration ID cached from config.
+// (int, false) indicates no configurationId was supplied; callers should
+// resolve it via the v2 API.
+func (s *server) ConfigurationID() (int, bool) {
+	if s.bluecat == nil || s.bluecat.configurationId == 0 {
+		return 0, false
+	}
+	return s.bluecat.configurationId, true
 }
 
 // GetCIDRFile returns the contents of the CIDR file

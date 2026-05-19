@@ -1,0 +1,26 @@
+{
+  "id": 100913,
+  "type": "HostRecord",
+  "name": "example",
+  "absoluteName": "example.spinuptest.internal",
+  "ttl": -1,
+  "reverseRecord": true,
+  "addresses": [
+    {
+      "id": 100914,
+      "type": "IP4Address",
+      "address": "10.5.0.10",
+      "state": "STATIC"
+    },
+    {
+      "id": 100915,
+      "type": "IP4Address",
+      "address": "10.5.0.11",
+      "state": "STATIC"
+    }
+  ],
+  "_links": {
+    "self": { "href": "/api/v2/resourceRecords/100913" },
+    "up":   { "href": "/api/v2/zones/100912" }
+  }
+}

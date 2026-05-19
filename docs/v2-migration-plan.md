@@ -1,6 +1,6 @@
 # BlueCat v1 -> v2 API Migration Plan for dns-api-go
 
-> **Status:** Phases 1–2 complete on `tl694-rest-v2-migration`, validated end-to-end against Yale BAM-test. Phases 3–7 redefined around consumer-audit findings (see [Scope](#scope)).
+> **Status:** Phases 1–4 complete on `tl694-rest-v2-migration`, validated end-to-end against Yale BAM-test. Phases 5–7 are the remaining service migration + cleanup work.
 
 ## Context
 
@@ -130,10 +130,13 @@ Deletes the v1-shaped surface area we're not migrating:
 
 **Single commit, no v2 logic mixed in.** Reviewers see the cleanup separately from the migration.
 
-### Phase 4: v2 Models + Thin Helpers
+### Phase 4: v2 Models + Thin Helpers ✅ **Complete**
+
 **Goal**: minimum-viable v2 response decoding + shared HTTP plumbing for the two services that survive.
 
-**`internal/models/bluecat_v2.go`** (new, small):
+**Deviation from original plan**: the v1 helpers in `internal/services/helpers.go` (`GetEntityByID`, `DeleteEntityByID`, `GetEntities`, `GetEntityByName`, `searchObjectByTypes`, `GetParentID`, `UpdateEntity`, `GetEntitiesByHintHelper`) are still wired into `record_service.go` and `ip_address_service.go`. Deleting them here would break the build before Phase 5 has a chance to migrate the services. Phase 4 is therefore **purely additive**; the v1 helpers retire as part of Phase 5 alongside their last callers.
+
+**`internal/models/bluecat_v2.go`** (new):
 ```go
 type V2HostRecord struct {
     ID           int    `json:"id"`
@@ -157,20 +160,24 @@ type V2Collection[T any] struct {
 }
 ```
 
-`V2HostRecord.ToEntity()` returns an `Entity{ID, Name, Type, Properties{"absoluteName": …, "addresses": "10.5.0.1,10.5.0.2"}}` — only the keys `server-api` actually reads. Other v2 fields are decoded but not surfaced to the wire.
+`V2HostRecord.ToEntity()` returns an `Entity{ID, Name, Type, Properties{"absoluteName": …, "addresses": "10.5.0.1,10.5.0.2"}}` — only the keys `server-api` actually reads. Other v2 fields are decoded but not surfaced to the wire. Empty address strings inside `addresses[]` are skipped so the joined value never has trailing/embedded commas.
 
 Decision deferred to implementation: whether we keep funnelling through `Entity` or let record handlers serialize a purpose-built `recordResponse` struct directly. The wire shape `server-api` parses is what matters; the internal representation is a refactor we can make once the migration lands.
 
-**`internal/services/helpers.go`** — slim down to what the two services need:
-- `GetConfigID(server) (int, error)` — returns cached `s.bluecat.configurationId`; falls back to `GET /api/v2/configurations?limit=1` only if unset. No network call in the steady state.
-- Drop `GetParentID`, `GetEntityByID`, `GetEntityByName`, `GetEntities`, `GetEntitiesByHintHelper`, `searchObjectByTypes`, `UpdateEntity`, `DeleteEntityByID` — none of them have a surviving caller after Phase 3.
+**`internal/services/helpers.go`** — additive edits:
+- `GetConfigID(server) (int, error)` rewritten to v2: returns cached `s.bluecat.configurationId` via the new `ServerInterface.ConfigurationID() (int, bool)` method; falls back to `GET /api/v2/configurations?limit=1` only if unset. No network call in the steady state.
 - New `buildFilter(predicates ...string) string` — joins with ` and ` and `url.QueryEscape`s the whole value. Pure string helper; ~10 lines.
+- The v1 helpers (`GetParentID`, `GetEntityByID`, `GetEntityByName`, `GetEntities`, `GetEntitiesByHintHelper`, `searchObjectByTypes`, `UpdateEntity`, `DeleteEntityByID`) stay in place for now — `record_service.go` and `ip_address_service.go` still call them. They're deleted in Phase 5 as each service flips to v2.
 
-**Tests**: unit tests in `internal/models/bluecat_v2_test.go` with one v2 fixture per struct (captured from BAM-test, written to `internal/models/testdata/`). No dispatcher or generic-parser tests needed.
+**Wiring**: `internal/common/config.go`'s `Bluecat.ConfigurationId` (string) is parsed to int during `NewServer` and stashed on the bluecat struct; non-integer values are logged and ignored (falls back to the v2 lookup). `MockServer` gains a `ConfigurationIDFunc` hook with a `0, false` default.
+
+**Tests**: `internal/models/bluecat_v2_test.go` with one v2 fixture per struct (representative shapes in `internal/models/testdata/`, not BAM captures — the live discovery walk in `internal/services/v2_validation_test.go` already pins the shape against BAM-test). Tests cover unmarshal, `ToEntity`, the empty-address skip, and `V2Collection[T]` for both records and addresses.
 
 ### Phase 5: Service Migration
 
 **Standing pattern**: each sub-phase adds skip-guarded `internal/services/{service}_v2_live_test.go` exercising read-only operations against BAM-test (Spinup Testing block). Mutating tests (create record, delete IP) gate behind `BLUECAT_V2_ALLOW_MUTATIONS=1` so they don't run by default.
+
+**Cleanup carried into Phase 5**: each sub-phase deletes the v1 helpers that lose their last caller as the service migrates. By the end of 5B, `internal/services/helpers.go` is left with just `GetConfigID` and `buildFilter` as originally targeted.
 
 #### 5A: RecordService (`internal/services/record_service.go`)
 
@@ -221,8 +228,9 @@ The bulk of test work landed inside Phases 2/4/5 (unit + skip-guarded live tests
 | 3 | `internal/services/zone_service.go`, `network_service.go`, `mac_address_service.go` (+ their `_test.go`) | Delete |
 | 3 | `internal/api/ip_address_handlers.go` | Edit (drop GetIpAddress/GetCIDR routes) |
 | 3 | `internal/services/helpers.go` | Edit (drop unused helpers, alongside cross-package callers) |
-| 4 | `internal/models/bluecat_v2.go`, `internal/models/testdata/` | New |
-| 4 | `internal/services/helpers.go` | Edit (slim to `GetConfigID` + `buildFilter`) |
+| 4 | `internal/models/bluecat_v2.go`, `internal/models/bluecat_v2_test.go`, `internal/models/testdata/v2_*.json` | New |
+| 4 | `internal/services/helpers.go` | Edit (v2 `GetConfigID` + `buildFilter`; v1 helpers stay until Phase 5) |
+| 4 | `internal/interfaces/server_interface.go`, `internal/api/server.go`, `internal/mocks/mock_server.go` | Edit (add `ConfigurationID() (int, bool)`) |
 | 5A | `internal/services/record_service.go` (+ `_v2_live_test.go`) | Edit (major) / New |
 | 5B | `internal/services/ip_address_service.go` (+ `_v2_live_test.go`) | Edit / New |
 | 6 | `internal/api/v2_contract_test.go` (new), various `_test.go` mock fixtures | New / Edit |
@@ -245,7 +253,7 @@ Each phase ships with both unit tests (`httptest` / mocks) **and** skip-guarded 
 1. **Phase 1**: ✅ Validation harness against BAM-test (`v2_validation_test.go`).
 2. **Phase 2**: ✅ `go test ./internal/api/...` offline + `BLUECAT_V2_CONFIG=… go test ./internal/api/ -run V2Live`.
 3. **Phase 3**: `go build ./...` and `go test ./...` both green after the deletions. No new tests required; the deleted code's tests go with it.
-4. **Phase 4**: `go test ./internal/models/...` against captured v2 fixtures.
+4. **Phase 4**: ✅ `go build ./...` and `go test ./...` green. `go test ./internal/models/ -run V2 -v` runs 7 cases (unmarshal + ToEntity + collection) against captured v2 fixtures.
 5. **Phase 5**: Per-service live tests pass read-only; mutating tests pass under `BLUECAT_V2_ALLOW_MUTATIONS=1`.
 6. **Phase 6**: Wire contract snapshot passes against BAM-test; `go test ./... -run V2Live` is a single command that runs every live test in the repo.
 7. **End-to-end**: Deploy to test environment, exercise `server-api` zone-add flows (host record create + delete, IP assign + release) against the new dns-api-go build.

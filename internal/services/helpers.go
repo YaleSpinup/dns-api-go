@@ -9,24 +9,50 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
+	"net/url"
 	"strings"
 )
 
-// GetConfigID retrieves the configuration ID from Bluecat.
+// GetConfigID returns the BlueCat configuration ID.
+//
+// Steady state: the ID is supplied via config and cached on the server, so
+// this is a pointer dereference. Fallback path hits v2 only when config did
+// not supply a configurationId.
 func GetConfigID(server interfaces.ServerInterface) (int, error) {
-	logger.Info("GetConfigID started")
+	if id, ok := server.ConfigurationID(); ok {
+		return id, nil
+	}
 
-	containers, err := GetEntities(server, 0, 1, 0, types.CONFIGURATION, false)
+	logger.Info("GetConfigID: no cached configurationId, resolving via v2 API")
+
+	resp, err := server.MakeRequest("GET", "/api/v2/configurations", "limit=1", nil)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("resolving configurationId via v2: %w", err)
 	}
-	if len(*containers) == 0 {
-		return 0, fmt.Errorf("failed to retrieve containerId")
-	}
-	configId := (*containers)[0].ID
 
-	logger.Info("GetConfigID successful", zap.Int("configId", configId))
-	return configId, nil
+	var col models.V2Collection[struct {
+		ID int `json:"id"`
+	}]
+	if err := json.Unmarshal(resp, &col); err != nil {
+		return 0, fmt.Errorf("decoding /api/v2/configurations response: %w", err)
+	}
+	if len(col.Data) == 0 {
+		return 0, fmt.Errorf("no configurations returned from /api/v2/configurations")
+	}
+
+	logger.Info("GetConfigID resolved via v2", zap.Int("configId", col.Data[0].ID))
+	return col.Data[0].ID, nil
+}
+
+// buildFilter assembles a BlueCat v2 filter querystring value from one or
+// more predicates joined by ` and `, returning a fully URL-encoded
+// `filter=...` fragment ready to drop into a queryParam string. Pass each
+// predicate in its v2 function-call form, e.g. `name:eq('foo')`.
+func buildFilter(predicates ...string) string {
+	if len(predicates) == 0 {
+		return ""
+	}
+	return "filter=" + url.QueryEscape(strings.Join(predicates, " and "))
 }
 
 // GetParentID retrieves the parent ID of an entity from Bluecat.
