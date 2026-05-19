@@ -1,6 +1,6 @@
 # BlueCat v1 -> v2 API Migration Plan for dns-api-go
 
-> **Status:** Phases 1–4 complete on `tl694-rest-v2-migration`, validated end-to-end against Yale BAM-test. Phases 5–7 are the remaining service migration + cleanup work.
+> **Status:** Phases 1–7 complete on `tl694-rest-v2-migration`, validated end-to-end against Yale BAM-test (Spinup Testing block, 10.5.0.0/26). Read-only + mutation V2Live tests all green; wire-contract snapshot pins the cross-repo shape with `server-api/lib/dns/proteus.rb`. Ready for review/merge.
 
 ## Context
 

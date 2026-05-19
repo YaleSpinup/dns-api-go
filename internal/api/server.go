@@ -23,15 +23,18 @@ import (
 	"dns-api-go/logger"
 	"encoding/json"
 	"errors"
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
-	"go.uber.org/zap"
 	"math/rand"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
+
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -164,11 +167,51 @@ func NewServer(config common.Config) error {
 	}
 
 	logger.Info("Starting listener", zap.String("address", config.ListenAddress))
-	if err := srv.ListenAndServe(); err != nil {
-		return err
+
+	// Run ListenAndServe in a goroutine so the main flow can wait for either
+	// a fatal serve error or a SIGINT/SIGTERM. The previous blocking call
+	// meant the BAM v2 session was never closed on shutdown.
+	serveErr := make(chan error, 1)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serveErr <- err
+		}
+		close(serveErr)
+	}()
+
+	shutdownCh := make(chan os.Signal, 1)
+	signal.Notify(shutdownCh, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-serveErr:
+		if err != nil {
+			s.releaseBluecatSession()
+			return err
+		}
+	case sig := <-shutdownCh:
+		logger.Info("Received shutdown signal", zap.String("signal", sig.String()))
 	}
 
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelShutdown()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error("graceful shutdown error", zap.Error(err))
+	}
+
+	s.releaseBluecatSession()
 	return nil
+}
+
+// releaseBluecatSession PATCHes the cached BAM v2 session to LOGGED_OUT on
+// shutdown so we don't accumulate stale sessions on the BlueCat side.
+// Best-effort; failures are logged but don't block exit.
+func (s *server) releaseBluecatSession() {
+	if s.bluecat == nil {
+		return
+	}
+	if err := s.logout(); err != nil {
+		logger.Warn("logout on shutdown failed", zap.Error(err))
+	}
 }
 
 // LogWriter is an http.ResponseWriter
