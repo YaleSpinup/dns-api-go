@@ -31,6 +31,7 @@ var testConfig = []byte(
 			"baseUrl": "https://bluecat.example.com",
 			"username": "test",
 			"password": "test",
+			"configurationId": "9876",
 			"viewId": "01234"
 		},
 		"cidrFile": "common/cidr.json",
@@ -56,11 +57,12 @@ func TestReadConfig(t *testing.T) {
 	expectedConfig := Config{
 		ListenAddress: ":8000",
 		Bluecat: &Bluecat{
-			Account:  "test",
-			BaseUrl:  "https://bluecat.example.com",
-			Username: "test",
-			Password: "test",
-			ViewId:   "01234",
+			Account:         "test",
+			BaseUrl:         "https://bluecat.example.com",
+			Username:        "test",
+			Password:        "test",
+			ConfigurationId: "9876",
+			ViewId:          "01234",
 		},
 		CIDRFile: "common/cidr.json",
 		Token:    "SEKRET",

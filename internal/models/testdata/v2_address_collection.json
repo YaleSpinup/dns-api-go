@@ -1,0 +1,11 @@
+{
+  "count": 1,
+  "data": [
+    {
+      "id": 100914,
+      "type": "IP4Address",
+      "address": "10.5.0.10",
+      "state": "STATIC"
+    }
+  ]
+}

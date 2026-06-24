@@ -88,3 +88,4 @@ func TestVersionHandler(t *testing.T) {
 			rr.Body.String(), expected)
 	}
 }
+

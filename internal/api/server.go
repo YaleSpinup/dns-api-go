@@ -23,14 +23,18 @@ import (
 	"dns-api-go/logger"
 	"encoding/json"
 	"errors"
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
-	"go.uber.org/zap"
 	"math/rand"
 	"net/http"
 	"os"
+	"os/signal"
+	"strconv"
 	"sync"
+	"syscall"
 	"time"
+
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -54,22 +58,20 @@ type proxyBackend struct {
 }
 
 type bluecat struct {
-	account   string
-	baseUrl   string
-	user      string
-	password  string
-	token     string
-	tokenLock sync.Mutex
-	viewId    string
+	account         string
+	baseUrl         string
+	user            string
+	password        string
+	token           string
+	sessionID       int
+	tokenLock       sync.Mutex
+	viewId          string
+	configurationId int
 }
 
 type Services struct {
-	BaseService *services.BaseService
-	ZoneService *services.ZoneService
-	NetworkService *services.NetworkService
-	MacAddressService *services.MacAddressService
 	IpAddressService *services.IpAddressService
-	RecordService *services.RecordService
+	RecordService    *services.RecordService
 }
 
 type server struct {
@@ -114,25 +116,25 @@ func NewServer(config common.Config) error {
 			password: b.Password,
 			viewId:   b.ViewId,
 		}
+		if b.ConfigurationId != "" {
+			id, err := strconv.Atoi(b.ConfigurationId)
+			if err != nil {
+				logger.Warn("ignoring non-integer bluecat.configurationId; will resolve via v2 API",
+					zap.String("configurationId", b.ConfigurationId),
+					zap.Error(err))
+			} else {
+				s.bluecat.configurationId = id
+			}
+		}
 	}
 
 	// Set CIDR file
 	s.cidrFile = config.CIDRFile
 
 	// Define services that interact with Bluecat entities
-	baseService := services.NewBaseService(&s)
-	zoneService := services.NewZoneService(&s)
-	networkService := services.NewNetworkService(&s)
-	macAddressService := services.NewMacAddressService(&s)
-	ipAddressService := services.NewIpAddressService(&s)
-	recordService := services.NewRecordService(&s)
 	s.services = Services{
-		BaseService: baseService,
-		ZoneService: zoneService,
-		NetworkService: networkService,
-		MacAddressService: macAddressService,
-		IpAddressService: ipAddressService,
-		RecordService: recordService,
+		IpAddressService: services.NewIpAddressService(&s),
+		RecordService:    services.NewRecordService(&s),
 	}
 
 	if b := config.ProxyBackend; b != nil {
@@ -165,11 +167,51 @@ func NewServer(config common.Config) error {
 	}
 
 	logger.Info("Starting listener", zap.String("address", config.ListenAddress))
-	if err := srv.ListenAndServe(); err != nil {
-		return err
+
+	// Run ListenAndServe in a goroutine so the main flow can wait for either
+	// a fatal serve error or a SIGINT/SIGTERM. The previous blocking call
+	// meant the BAM v2 session was never closed on shutdown.
+	serveErr := make(chan error, 1)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serveErr <- err
+		}
+		close(serveErr)
+	}()
+
+	shutdownCh := make(chan os.Signal, 1)
+	signal.Notify(shutdownCh, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-serveErr:
+		if err != nil {
+			s.releaseBluecatSession()
+			return err
+		}
+	case sig := <-shutdownCh:
+		logger.Info("Received shutdown signal", zap.String("signal", sig.String()))
 	}
 
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelShutdown()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error("graceful shutdown error", zap.Error(err))
+	}
+
+	s.releaseBluecatSession()
 	return nil
+}
+
+// releaseBluecatSession PATCHes the cached BAM v2 session to LOGGED_OUT on
+// shutdown so we don't accumulate stale sessions on the BlueCat side.
+// Best-effort; failures are logged but don't block exit.
+func (s *server) releaseBluecatSession() {
+	if s.bluecat == nil {
+		return
+	}
+	if err := s.logout(); err != nil {
+		logger.Warn("logout on shutdown failed", zap.Error(err))
+	}
 }
 
 // LogWriter is an http.ResponseWriter
@@ -251,6 +293,16 @@ func retry(attempts int, doubling int, sleep time.Duration, f func() error) erro
 	}
 
 	return nil
+}
+
+// ConfigurationID returns the BlueCat configuration ID cached from config.
+// (int, false) indicates no configurationId was supplied; callers should
+// resolve it via the v2 API.
+func (s *server) ConfigurationID() (int, bool) {
+	if s.bluecat == nil || s.bluecat.configurationId == 0 {
+		return 0, false
+	}
+	return s.bluecat.configurationId, true
 }
 
 // GetCIDRFile returns the contents of the CIDR file

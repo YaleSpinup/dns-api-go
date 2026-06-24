@@ -18,9 +18,7 @@ package api
 
 import (
 	"dns-api-go/logger"
-	"go.uber.org/zap"
 	"net/http"
-	"strings"
 )
 
 func (s *server) HomeHandler(w http.ResponseWriter, _ *http.Request) {
@@ -39,27 +37,4 @@ func (s *server) PingHandler(w http.ResponseWriter, _ *http.Request) {
 func (s *server) VersionHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	s.respond(w, s.version, http.StatusOK)
-}
-
-func (s *server) SystemInfoHandler(w http.ResponseWriter, _ *http.Request) {
-	body, err := s.MakeRequest("GET", "/getSystemInfo", "", nil)
-	if err != nil {
-		logger.Error("Failed to retrieve system info",
-			zap.Error(err))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Parse the response body into a map
-	info := make(map[string]string)
-	pairs := strings.Split(string(body), "|")
-	for _, pair := range pairs {
-		kv := strings.Split(pair, "=")
-		if len(kv) == 2 {
-			info[kv[0]] = kv[1]
-		}
-	}
-
-	// Encode the map as JSON and write it to the response
-	s.respond(w, info, http.StatusOK)
 }

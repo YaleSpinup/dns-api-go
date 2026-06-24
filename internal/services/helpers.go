@@ -1,317 +1,210 @@
 package services
 
 import (
-	"dns-api-go/internal/common"
 	"dns-api-go/internal/interfaces"
 	"dns-api-go/internal/models"
-	"dns-api-go/internal/types"
 	"dns-api-go/logger"
 	"encoding/json"
 	"fmt"
-	"go.uber.org/zap"
+	"net/url"
 	"strings"
+	"time"
+
+	"go.uber.org/zap"
 )
 
-// GetConfigID retrieves the configuration ID from Bluecat.
+// GetConfigID returns the BlueCat configuration ID.
+//
+// Steady state: the ID is supplied via config and cached on the server, so
+// this is a pointer dereference. Fallback path hits v2 only when config did
+// not supply a configurationId.
 func GetConfigID(server interfaces.ServerInterface) (int, error) {
-	logger.Info("GetConfigID started")
+	if id, ok := server.ConfigurationID(); ok {
+		return id, nil
+	}
 
-	containers, err := GetEntities(server, 0, 1, 0, types.CONFIGURATION, false)
+	logger.Info("GetConfigID: no cached configurationId, resolving via v2 API")
+
+	resp, err := server.MakeRequest("GET", "/api/v2/configurations", "limit=1", nil)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("resolving configurationId via v2: %w", err)
 	}
-	if len(*containers) == 0 {
-		return 0, fmt.Errorf("failed to retrieve containerId")
-	}
-	configId := (*containers)[0].ID
 
-	logger.Info("GetConfigID successful", zap.Int("configId", configId))
-	return configId, nil
+	var col models.V2Collection[struct {
+		ID int `json:"id"`
+	}]
+	if err := json.Unmarshal(resp, &col); err != nil {
+		return 0, fmt.Errorf("decoding /api/v2/configurations response: %w", err)
+	}
+	if len(col.Data) == 0 {
+		return 0, fmt.Errorf("no configurations returned from /api/v2/configurations")
+	}
+
+	logger.Info("GetConfigID resolved via v2", zap.Int("configId", col.Data[0].ID))
+	return col.Data[0].ID, nil
 }
 
-// GetParentID retrieves the parent ID of an entity from Bluecat.
-func GetParentID(server interfaces.ServerInterface, entityId int) (int, error) {
-	logger.Info("GetParentID started", zap.Int("entityId", entityId))
-
-	// Send http request to bluecat
-	route, params := "/getParent", fmt.Sprintf("entityId=%d", entityId)
-	resp, err := server.MakeRequest("GET", route, params, nil)
-	if err != nil {
-		logger.Error("Error getting parent ID", zap.Error(err), zap.Int("entityId", entityId))
-		return -1, err
+// buildFilter assembles a BlueCat v2 filter querystring value from one or
+// more predicates joined by ` and `, returning a fully URL-encoded
+// `filter=...` fragment ready to drop into a queryParam string. Pass each
+// predicate in its v2 function-call form, e.g. `name:eq('foo')`.
+func buildFilter(predicates ...string) string {
+	if len(predicates) == 0 {
+		return ""
 	}
-
-	// Unmarshal the response
-	var bluecatEntity models.BluecatEntity
-	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
-		logger.Error("Error unmarshalling entity response", zap.Error(err))
-		return -1, err
-	}
-
-	// Check if the response represents an empty entity
-	if bluecatEntity.IsEmpty() {
-		logger.Info("Entity not found", zap.Int("entity id", entityId))
-		return -1, &ErrEntityNotFound{}
-	}
-
-	// Convert BluecatEntity to Entity
-	parentEntity := bluecatEntity.ToEntity()
-
-	logger.Info("GetParentID successful", zap.Int("parentId", parentEntity.ID))
-	return parentEntity.ID, nil
+	return "filter=" + url.QueryEscape(strings.Join(predicates, " and "))
 }
 
-// GetEntityByID Retrieves an entity by ID from bluecat
-func GetEntityByID(server interfaces.ServerInterface, id int, includeHA bool, expectedTypes []string) (*models.Entity, error) {
-	// Send http request to bluecat
-	route, params := "/getEntityById", fmt.Sprintf("id=%d&includeHA=%t", id, includeHA)
-	resp, err := server.MakeRequest("GET", route, params, nil)
-
-	// Check for errors when sending request
-	if err != nil {
-		logger.Error("Error getting entity by ID", zap.Error(err), zap.Int("id", id))
-		return nil, err
-	}
-	logger.Info("Received response for GetEntityByID", zap.ByteString("response", resp))
-
-	// Unmarshal the response
-	var bluecatEntity models.BluecatEntity
-	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
-		logger.Error("Error unmarshalling entity response", zap.Error(err))
-		return nil, err
-	}
-	// Check if the response represents an empty entity
-	if bluecatEntity.IsEmpty() {
-		logger.Info("Entity not found", zap.Int("id", id))
-		return nil, &ErrEntityNotFound{}
-	}
-
-	// Convert BluecatEntity to Entity
-	entity := bluecatEntity.ToEntity()
-
-	// Check if the entity type is one of the expected types
-	if len(expectedTypes) > 0 && !common.Contains(expectedTypes, entity.Type) {
-		logger.Error("Entity type does not match expected types",
-			zap.String("entityType", entity.Type),
-			zap.Strings("expectedTypes", expectedTypes))
-		return nil, &ErrEntityTypeMismatch{expectedTypes, entity.Type}
-	}
-
-	logger.Info("GetEntityByID successful",
-		zap.Int("entityID", entity.ID),
-		zap.String("entityType", entity.Type))
-	return &entity, nil
+// coreFieldKeys are the keys that v1 callers historically stuffed into the
+// pipe-delimited `properties` string but that v2 surfaces as top-level
+// fields on Address / HostRecord bodies. They are NOT user-defined fields
+// and must not go into `userDefinedFields` — the callers already pull
+// them out (or simply don't use them) before building the request body.
+var coreFieldKeys = map[string]struct{}{
+	"":                 {},
+	"type":             {},
+	"state":            {},
+	"address":          {},
+	"addresses":        {},
+	"name":             {},
+	"absoluteName":     {},
+	"macAddress":       {},
+	"reverseRecord":    {},
+	"linkedRecord":     {},
+	"linkedRecordName": {},
+	"ttl":              {},
 }
 
-var ALLOWDELETE = []string{
-	types.HOSTRECORD,
-	types.EXTERNALHOST,
-	types.CNAMERECORD,
-	types.IP4ADDRESS,
-	types.MACADDRESS,
-	types.MACPOOL,
+// defaultAddressUDFs returns the user-defined field set Yale's BAM
+// requires when allocating a v2 IPv4Address, used as a fallback when the
+// caller supplied no UDFs of its own.
+//
+// The set mirrors the literal that server-api hardcodes for its
+// `assign_ip` flow (see server-api/lib/actions/server/base.rb:899-900):
+//
+//	machine_type=Virtual machine
+//	description=Auto-provisioned by Spinup ServerAPI
+//	phone=xxx
+//	location=Cloud
+//	reg_by=SpinupManaged
+//	reg_date=<UTC YYYY-MM-DD HH:MM:SS>
+//	user_name=<requesting user>
+//
+// server-api's `create_host_record` flow doesn't pass properties at all,
+// so a v2 auto-allocation from CreateRecord would otherwise reach BAM
+// with no `userDefinedFields` and get rejected one required field at a
+// time. Under v1 BAM silently auto-created Addresses during
+// addHostRecord without validating UDFs; v2 splits the operation and
+// validates strictly, so dns-api-go fills the gap here.
+//
+// `reg_date` is computed at call time in RFC 3339 / ISO 8601 with the
+// `Z` UTC zone designator. v1 BAM accepted server-api's
+// `%Y-%m-%d %H:%M:%S` format silently; v2 enforces ISO 8601 with time
+// zone and rejects v1-format values with InvalidUdfDateValue. `user_name`
+// falls back to a service identifier — dns-api-go has no upstream user
+// context on the create_host_record path. Making this config-driven (so
+// the value set can shift without a code change) is the proper follow-up.
+func defaultAddressUDFs() map[string]interface{} {
+	return map[string]interface{}{
+		"machine_type": "Virtual machine",
+		"description":  "Auto-provisioned by Spinup ServerAPI",
+		"phone":        "xxx",
+		"location":     "Cloud",
+		"reg_by":       "Spinup",
+		"reg_date":     time.Now().UTC().Format(time.RFC3339),
+		"user_name":    "spinup-dns-api",
+	}
 }
 
-// DeleteEntityByID Deletes an entity by ID from bluecat
-func DeleteEntityByID(server interfaces.ServerInterface, id int, expectedTypes []string) error {
-	logger.Info("DeleteEntityByID started", zap.Int("id", id))
-
-	// Get the entity type
-	entity, err := GetEntityByID(server, id, false, expectedTypes)
-	if err != nil {
-		return err
+// userDefinedFieldsFromProperties extracts user-defined fields from the
+// v1-shaped properties map (key=value pairs that the handlers parse from a
+// pipe-delimited string). v2 requires UDFs to live under the
+// `userDefinedFields` object on resource bodies, not at the top level —
+// Yale's BAM, for example, makes `phone` a required UDF on IPv4Address
+// and rejects allocation POSTs that omit it.
+//
+// Returns nil when there are no UDFs to send (the caller then omits the
+// `userDefinedFields` key entirely rather than sending an empty object).
+func userDefinedFieldsFromProperties(properties map[string]string) map[string]interface{} {
+	if len(properties) == 0 {
+		return nil
 	}
-
-	// Check if the entity type is allowed to be deleted
-	isAllowedToDelete := false
-	for _, allowedType := range ALLOWDELETE {
-		if entity.Type == allowedType {
-			isAllowedToDelete = true
-			break
+	udfs := make(map[string]interface{}, len(properties))
+	for k, v := range properties {
+		if _, isCore := coreFieldKeys[k]; isCore {
+			continue
 		}
+		if v == "" {
+			continue
+		}
+		udfs[k] = v
 	}
-
-	if !isAllowedToDelete {
-		logger.Info("Entity deletion not allowed", zap.Int("id", id), zap.String("type", entity.Type))
-		return &ErrDeleteNotAllowed{Type: entity.Type}
+	if len(udfs) == 0 {
+		return nil
 	}
-
-	// Send http request to bluecat
-	route, params := "/delete", fmt.Sprintf("objectId=%d", id)
-	_, err = server.MakeRequest("DELETE", route, params, nil)
-
-	// Check for errors while sending request
-	if err != nil {
-		logger.Error("Error deleting entity", zap.Error(err), zap.Int("id", id))
-		return err
-	}
-
-	logger.Info("DeleteEntityByID successful", zap.Int("id", id))
-	return nil
+	return udfs
 }
 
-// UpdateEntity Updates an entity in Bluecat
-func UpdateEntity(server interfaces.ServerInterface, entity *models.Entity) error {
-	logger.Info("UpdateEntity started", zap.Int("entityID", entity.ID))
-
-	bluecatEntityJSON, err := entity.ToBluecatJSON()
-	if err != nil {
-		logger.Error("Error marshalling entity to JSON for Bluecat", zap.Error(err))
+// splitFQDN separates an absolute name into the local record label and the
+// zone ID it should live under. e.g. "host.spinuptest.internal" with view
+// 100902 returns (100913, "host", nil) where 100913 is the spinuptest zone.
+// Both RecordService.CreateRecord and IpAddressService.AssignIpAddress
+// need this on their create paths.
+func splitFQDN(server interfaces.ServerInterface, absoluteName string, viewId int) (int, string, error) {
+	if absoluteName == "" {
+		return 0, "", fmt.Errorf("empty absoluteName")
 	}
-
-	// Create an io.Reader from the JSON string
-	body := strings.NewReader(string(bluecatEntityJSON))
-
-	// Send http request to bluecat
-	route := "/update"
-	_, err = server.MakeRequest("PUT", route, "", body)
-
-	// Check for errors when sending request
-	if err != nil {
-		logger.Error("Error updating entity", zap.Error(err), zap.Int("entityID", entity.ID))
-		return err
+	parts := strings.Split(absoluteName, ".")
+	if len(parts) < 2 {
+		return 0, "", fmt.Errorf("absoluteName %q has no zone component", absoluteName)
 	}
-
-	logger.Info("UpdateEntity successful", zap.Int("entityID", entity.ID))
-	return nil
+	zoneID, err := resolveZoneIDFromLabels(server, parts[1:], viewId)
+	if err != nil {
+		return 0, "", err
+	}
+	return zoneID, parts[0], nil
 }
 
-// GetEntitiesByHintHelper retrieves entities by hint, given a specific route.
-// Many of the entity retrieval functions in across the different services use this helper function because they share the same logic
-func GetEntitiesByHintHelper(server interfaces.ServerInterface, route string, start int, count int, options map[string]string) (*[]models.Entity, error) {
-	logger.Info("GetEntitiesByHint started",
-		zap.Int("start", start),
-		zap.Int("count", count),
-		zap.Any("options", options))
-
-	// Use Configuration ID as the container ID
-	containerId, err := GetConfigID(server)
-	if err != nil {
-		return nil, err
+// resolveZoneIDFromLabels walks BlueCat's zone tree right-to-left,
+// descending from the view into nested zones until every label is matched.
+// "spinuptest.internal" with view 100902 → first matches Zone(name='internal')
+// under views/100902/zones, then Zone(name='spinuptest') under zones/{id}/zones.
+//
+// At the view level, type:eq('Zone') disambiguates between Zone and
+// ExternalHostsZone (which can share a name — Phase 1 finding). At deeper
+// levels the type filter is rejected by BAM with HTTP 400
+// InvalidFilterField — sub-zones of a Zone can only be type=Zone anyway,
+// so dropping the predicate is both safe and required.
+func resolveZoneIDFromLabels(server interfaces.ServerInterface, zoneLabels []string, viewId int) (int, error) {
+	if len(zoneLabels) == 0 {
+		return 0, fmt.Errorf("no zone labels to resolve")
 	}
-
-	// Construct the request parameters
-	params := fmt.Sprintf("containerId=%d&start=%d&count=%d", containerId, start, count)
-	params += "&options=" + common.ConvertToSeparatedString(options, "|")
-
-	// Use the configuration ID to call the Bluecat API to get entities
-	resp, err := server.MakeRequest("GET", route, params, nil)
-	if err != nil {
-		return nil, err
+	collectionRoute := fmt.Sprintf("/api/v2/views/%d/zones", viewId)
+	atViewLevel := true
+	var zoneID int
+	for i := len(zoneLabels) - 1; i >= 0; i-- {
+		label := zoneLabels[i]
+		predicates := []string{fmt.Sprintf("name:eq('%s')", label)}
+		if atViewLevel {
+			predicates = append(predicates, "type:eq('Zone')")
+		}
+		query := buildFilter(predicates...) + "&limit=1"
+		resp, err := server.MakeRequest("GET", collectionRoute, query, nil)
+		if err != nil {
+			return 0, fmt.Errorf("looking up zone %q under %s: %w", label, collectionRoute, err)
+		}
+		var col models.V2Collection[struct {
+			ID int `json:"id"`
+		}]
+		if err := json.Unmarshal(resp, &col); err != nil {
+			return 0, fmt.Errorf("decode zone lookup for %q: %w", label, err)
+		}
+		if len(col.Data) == 0 {
+			return 0, fmt.Errorf("zone %q not found under %s", label, collectionRoute)
+		}
+		zoneID = col.Data[0].ID
+		collectionRoute = fmt.Sprintf("/api/v2/zones/%d/zones", zoneID)
+		atViewLevel = false
 	}
-
-	// Unmarshal the response
-	var entitiesResp []models.BluecatEntity
-	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
-		logger.Error("Error unmarshalling entities response", zap.Error(err))
-		return nil, err
-	}
-
-	// For each entity response, convert it to an entity
-	entities := models.ConvertToEntities(entitiesResp)
-
-	logger.Info("GetEntitiesByHint successful", zap.Int("count", len(entities)))
-	return &entities, nil
-}
-
-// GetEntities retrieves a list of entities from Bluecat based on the provided parameters.
-// Note: The maximum value for count is 10.
-func GetEntities(server interfaces.ServerInterface, start int, count int, parentId int, entityType string, includeHA bool) (*[]models.Entity, error) {
-	logger.Info("GetEntities started",
-		zap.Int("start", start),
-		zap.Int("count", count),
-		zap.Int("parentId", parentId),
-		zap.String("entityType", entityType),
-		zap.Bool("includeHA", includeHA))
-
-	// Send http request to bluecat
-	route := "/getEntities"
-	params := fmt.Sprintf("start=%d&count=%d&parentId=%d&type=%s&includeHA=%t",
-		start, count, parentId, entityType, includeHA)
-	resp, err := server.MakeRequest("GET", route, params, nil)
-
-	// Check for errors when sending request
-	if err != nil {
-		return nil, err
-	}
-
-	// Unmarshal the response
-	var entitiesResp []models.BluecatEntity
-	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
-		logger.Error("Error unmarshalling entities response", zap.Error(err))
-		return nil, err
-	}
-
-	// For each entity response, convert it to an entity
-	entities := models.ConvertToEntities(entitiesResp)
-
-	logger.Info("GetEntities successful", zap.Int("count", len(entities)))
-	return &entities, nil
-}
-
-func GetEntityByName(server interfaces.ServerInterface, name string, entityType string, parentId int, includeHA bool) (*models.Entity, error) {
-	logger.Info("GetEntityByName started", zap.String("name", name), zap.String("entityType", entityType))
-
-	// Send http request to bluecat
-	route := "/getEntityByName"
-	params := fmt.Sprintf("name=%s&type=%s&includeHA=%t&parentId=%d", name, entityType, includeHA, parentId)
-
-	resp, err := server.MakeRequest("GET", route, params, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// Unmarshal the response
-	var bluecatEntity models.BluecatEntity
-	if err := json.Unmarshal(resp, &bluecatEntity); err != nil {
-		logger.Error("Error unmarshalling entity response", zap.Error(err))
-		return nil, err
-	}
-
-	// Check if the response represents an empty entity
-	if bluecatEntity.IsEmpty() {
-		logger.Info("Entity not found", zap.String("name", name))
-		return nil, &ErrEntityNotFound{}
-	}
-
-	// Convert BluecatEntity to Entity
-	entity := bluecatEntity.ToEntity()
-
-	logger.Info("GetEntityByName successful", zap.Int("entityID", entity.ID))
-	return &entity, nil
-}
-
-func searchObjectByTypes(server interfaces.ServerInterface, keyword string, start int, count int, includeHA bool, types []string) (*[]models.Entity, error) {
-	logger.Info("searchObjectByTypes started",
-		zap.String("keyword", keyword),
-		zap.Int("start", start),
-		zap.Int("count", count),
-		zap.Strings("types", types))
-
-	// Convert types array to a comma-separated string
-	typesStr := strings.Join(types, ",")
-
-	// Send http request to bluecat
-	route := "/searchObjectByTypes"
-	params := fmt.Sprintf("keyword=%s&start=%d&count=%d&includeHA=%t&types=%s",
-		keyword, start, count, includeHA, typesStr)
-	resp, err := server.MakeRequest("GET", route, params, nil)
-
-	// Check for errors when sending request
-	if err != nil {
-		return nil, err
-	}
-
-	// Unmarshal the response
-	var entitiesResp []models.BluecatEntity
-	if err := json.Unmarshal(resp, &entitiesResp); err != nil {
-		logger.Error("Error unmarshalling entities response", zap.Error(err))
-		return nil, err
-	}
-
-	// For each entity response, convert it to an entity
-	entities := models.ConvertToEntities(entitiesResp)
-
-	logger.Info("searchObjectByTypes successful", zap.Int("count", len(entities)))
-	return &entities, nil
+	return zoneID, nil
 }
